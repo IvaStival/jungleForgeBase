@@ -1,0 +1,38 @@
+# Per-project PROD stack — ONE self-contained container (nginx + php-fpm + horizon +
+# scheduler under supervisord). Driven by the Makefile:
+#   make build <project> env=prod && make up <project> env=prod
+#
+# Code, built assets and nginx config are baked into the image; only the project's .env and
+# php config are mounted at runtime. Backing services are the shared stack on lion-network
+# (`make services-up`). nginx publishes on 127.0.0.1 — terminate TLS with the host's system
+# nginx and proxy to it.
+
+services:
+  app:
+    build:
+      context: ${PROJECT_PATH}
+      dockerfile: ${APP_DOCKERFILE}     # jungleforge's one shared Dockerfile (outside the context)
+      additional_contexts:
+        jungleforge: ${PHPDOCKER_ROOT}    # jungleforge repo root — lets the Dockerfile COPY base/zsh/*
+      target: app
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+    image: ${REGISTRY:+${REGISTRY}/}${IMAGE_NAME:-app}:${IMAGE_TAG:-latest}
+    container_name: ${PHP_CONTAINER:-app-php}
+    restart: unless-stopped
+    volumes:
+      - ${PROJECT_PATH}/.env:/var/www/.env:ro
+      - ${PHP_INI}:/usr/local/etc/php/php.ini:ro
+      - ${OPCACHE_INI}:/usr/local/etc/php/conf.d/zz-opcache.ini:ro
+      - ${FPM_POOL}:/usr/local/etc/php-fpm.d/www.conf:ro
+    ports:
+      - "127.0.0.1:${APP_HTTP_PORT:-8080}:8080"   # nginx — front it with the host's system nginx
+    networks:
+      lion-network:
+        # Other projects reach this one at http://${APP_HOST}:8080 over the shared network.
+        aliases:
+          - ${APP_HOST:-app}
+
+networks:
+  lion-network:
+    external: true

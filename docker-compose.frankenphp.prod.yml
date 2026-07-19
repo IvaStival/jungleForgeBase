@@ -1,0 +1,31 @@
+# Per-project PROD stack for the "frankenphp" stack — ONE self-contained container (code +
+# vendor/ + Caddyfile baked in, FrankenPHP serving directly). Driven by the Makefile:
+#   make build <project> env=prod && make up <project> env=prod
+#
+# Only the project's .env is mounted at runtime; everything else is baked into the image.
+# Backing services are the shared stack on lion-network (`make services-up`). FrankenPHP
+# publishes on 127.0.0.1 — terminate TLS with the host's system nginx/Caddy and proxy to it.
+
+services:
+  app:
+    build:
+      context: ${PROJECT_PATH}
+      dockerfile: ${APP_DOCKERFILE}
+      target: app
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+    image: ${REGISTRY:+${REGISTRY}/}${IMAGE_NAME:-app}:${IMAGE_TAG:-latest}
+    container_name: ${PHP_CONTAINER:-app-php}
+    restart: unless-stopped
+    volumes:
+      - ${PROJECT_PATH}/.env:/app/.env:ro
+    ports:
+      - "127.0.0.1:${APP_HTTP_PORT:-8080}:8080"
+    networks:
+      lion-network:
+        aliases:
+          - ${APP_HOST:-app}
+
+networks:
+  lion-network:
+    external: true

@@ -1,0 +1,9 @@
+# Copy to the project root as .dockerignore. Keeps prod build context small and reproducible
+# (node_modules/dist are rebuilt in-image; local env never gets baked).
+.git
+node_modules
+dist
+.env
+.env.*
+*.log
+.DS_Store

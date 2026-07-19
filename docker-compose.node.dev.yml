@@ -1,0 +1,39 @@
+# Per-project DEV stack for a Node/Vite frontend — ONE container running the vite dev server
+# (with HMR) under supervisord. Frontend counterpart of docker-compose.dev.yml.
+# Driven by the Makefile (selected automatically when the project's .docker-env has STACK=node):
+#   make up <project>          (default env=dev)
+#
+# Code is volume-mounted from ${PROJECT_PATH}; node_modules lives on an anonymous volume so the
+# host's (or absent) node_modules doesn't shadow the container's. The shared backing services on
+# lion-network are reachable by alias (e.g. the backend at http://<backend>:8080).
+
+services:
+  app:
+    build:
+      context: ${PROJECT_PATH}
+      dockerfile: ${APP_DOCKERFILE}     # jungleforge's build/node.Dockerfile (outside the context)
+      target: dev
+      args:
+        NODE_VERSION: ${NODE_VERSION:-20}
+    image: ${IMAGE_NAME:-app}:dev
+    container_name: ${APP_CONTAINER:-app-web}
+    restart: unless-stopped
+    volumes:
+      - ${PROJECT_PATH}:/app
+      - /app/node_modules                 # anon volume keeps the container's node_modules
+    environment:
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-}
+      VITE_HMR_CLIENT_PORT: ${VITE_PORT:-5173}   # HMR websocket connects on the host port
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${VITE_PORT:-5173}:5173"         # vite dev server / HMR (the app in the browser)
+    networks:
+      lion-network:
+        # Other projects reach this one at http://${APP_HOST}:5173 over the shared network.
+        aliases:
+          - ${APP_HOST:-app}
+
+networks:
+  lion-network:
+    external: true

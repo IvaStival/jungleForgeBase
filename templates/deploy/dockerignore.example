@@ -1,0 +1,29 @@
+# Copy to your project root as .dockerignore. Keeps the prod build context small and keeps
+# secrets / host-built artifacts out of the baked image.
+
+.git
+.gitignore
+.github
+
+# Host-installed deps — the image rebuilds these in the vendor/assets stages.
+vendor
+node_modules
+
+# Secrets — the prod container bind-mounts .env at runtime instead.
+.env
+.env.*
+!.env.example
+
+# Local/dev cruft
+storage/*.key
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+public/hot
+public/storage
+tests
+phpunit.xml
+*.md
+.editorconfig
+.DS_Store

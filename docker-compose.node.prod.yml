@@ -1,0 +1,31 @@
+# Per-project PROD stack for a Node/Vite frontend — the built SPA served by `vite preview` under
+# supervisord. Frontend counterpart of docker-compose.prod.yml.
+# Driven by the Makefile (selected when the project's .docker-env has STACK=node) with env=prod:
+#   make up <project> env=prod
+#
+# Code + dist + node_modules are baked into the image (nothing volume-mounted). Public VITE_* vars
+# are inlined at build time via build.args. The preview server binds loopback only — front it with
+# the host's system nginx for TLS, same as the PHP prod image.
+
+services:
+  app:
+    build:
+      context: ${PROJECT_PATH}
+      dockerfile: ${APP_DOCKERFILE}     # jungleforge's build/node.Dockerfile (outside the context)
+      target: app
+      args:
+        NODE_VERSION: ${NODE_VERSION:-20}
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-}
+    image: ${REGISTRY:+${REGISTRY}/}${IMAGE_NAME:-app}:${IMAGE_TAG:-latest}
+    container_name: ${APP_CONTAINER:-app-web}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_HTTP_PORT:-4173}:5173"   # loopback only; front with host nginx for TLS
+    networks:
+      lion-network:
+        aliases:
+          - ${APP_HOST:-app}
+
+networks:
+  lion-network:
+    external: true

@@ -1,0 +1,17 @@
+# Per-project Docker orchestration config for a Node/Vite frontend. Copy to deploy/.docker-env.
+# NO app config here — public VITE_* vars live in the project's own .env (they're build-time).
+
+STACK=node              # selects the Node pipeline (build/node.Dockerfile + docker-compose.node.*)
+NODE_VERSION=20
+IMAGE_NAME=app
+IMAGE_TAG=latest
+
+# Host-published port for the vite dev (dev) / preview (prod) server
+VITE_PORT=5173
+
+# API origin the SPA talks to. On the shared lion-network, point at the backend's in-container
+# nginx, e.g. http://<backend-project>:8080 (build-time inlined for prod; proxy target in dev).
+VITE_BACKEND_URL=
+
+# Container name (single container per project: the node process under supervisord)
+APP_CONTAINER=app-web

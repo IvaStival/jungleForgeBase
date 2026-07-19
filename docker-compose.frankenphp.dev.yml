@@ -1,0 +1,39 @@
+# Per-project DEV stack for the "frankenphp" stack — ONE self-contained container (FrankenPHP:
+# Caddy + PHP in a single process, no separate nginx/php-fpm). Driven by the Makefile:
+#   make up <project>          (default env=dev, when the project's deploy/.docker-env has
+#                                STACK=frankenphp)
+#
+# Code (incl. vendor/) is volume-mounted from ${PROJECT_PATH}; the Caddyfile is mounted from the
+# project's own deploy/Caddyfile so it's editable without a rebuild. Backing services (postgres /
+# redis / rabbitmq) are the shared stack on lion-network — start them with `make services-up`.
+
+services:
+  app:
+    build:
+      context: ${PROJECT_PATH}
+      dockerfile: ${APP_DOCKERFILE}     # jungleforge's one shared frankenphp Dockerfile
+      target: dev
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+    image: ${IMAGE_NAME:-app}:dev
+    container_name: ${PHP_CONTAINER:-app-php}
+    restart: unless-stopped
+    volumes:
+      - ${PROJECT_PATH}:/app
+      - ${PROJECT_PATH}/deploy/Caddyfile:/etc/frankenphp/Caddyfile:ro
+    environment:
+      XDEBUG_CONFIG: "client_host=host.docker.internal client_port=${XDEBUG_PORT:-9003}"
+      PHP_IDE_CONFIG: "serverName=${IMAGE_NAME:-app}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${APP_HTTP_PORT:-8080}:8080"    # FrankenPHP (the app in the browser)
+    networks:
+      lion-network:
+        # Other projects reach this one at http://${APP_HOST}:8080 over the shared network.
+        aliases:
+          - ${APP_HOST:-app}
+
+networks:
+  lion-network:
+    external: true
