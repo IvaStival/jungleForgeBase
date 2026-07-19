@@ -1,0 +1,15 @@
+# Per-project Docker orchestration config. Copy to deploy/.docker-env and edit.
+# NO Laravel config here — that lives in the project's main .env (DB_HOST=postgres,
+# REDIS_HOST=redis, RABBITMQ_HOST=rabbitmq, etc.).
+
+PHP_VERSION=8.4
+IMAGE_NAME=demo-api
+IMAGE_TAG=latest
+
+# Host-published ports (reach the container's services from the host)
+APP_HTTP_PORT=8090      # nginx (in-container) — the app in the browser
+VITE_PORT=5480          # dead mapping (no Vite in this demo)
+XDEBUG_PORT=9003        # xdebug client port (outbound to your IDE; config, not published)
+
+# Container name (single container per project: nginx + php-fpm + horizon + scheduler)
+PHP_CONTAINER=demo-api-php
