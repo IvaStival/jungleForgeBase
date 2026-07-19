@@ -1,0 +1,20 @@
+# FrankenPHP, served on :8080 (jungleforgebase's per-project container port convention — other
+# projects on lion-network reach this one at http://<project>:8080 regardless of the
+# host-published port set by APP_HTTP_PORT in deploy/.docker-env).
+#
+# https://frankenphp.dev/docs/config/
+
+{
+	skip_install_trust
+	admin off
+	frankenphp {
+		{$FRANKENPHP_CONFIG}
+	}
+}
+
+:8080 {
+	root * /app/public
+	encode zstd br gzip
+
+	php_server
+}

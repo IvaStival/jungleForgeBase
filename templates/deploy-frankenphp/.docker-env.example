@@ -1,0 +1,15 @@
+# Per-project Docker orchestration config. Copy to deploy/.docker-env and edit.
+# NO Symfony config here — that lives in the project's main .env (DATABASE_URL, APP_SECRET,
+# REDIS_URL, etc.).
+
+STACK=frankenphp
+PHP_VERSION=8.4
+IMAGE_NAME=example-app
+IMAGE_TAG=latest
+
+# Host-published port (reach FrankenPHP from the host; the app in the browser)
+APP_HTTP_PORT=8080      # FrankenPHP (in-container 8080) published to the host
+XDEBUG_PORT=9003        # xdebug client port (outbound to your IDE; config, not published)
+
+# Container name (single container: FrankenPHP serving the app directly, no nginx/php-fpm split)
+PHP_CONTAINER=example-app
