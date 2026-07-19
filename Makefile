@@ -13,7 +13,12 @@
 
 env ?= dev
 
-SERVICES := docker compose -p jungleforge-services -f docker-compose.services.yml
+# Prefix for the shared services' compose project + container names (jungleforge-services,
+# jungleforge-postgres, ...). Override in .env if running more than one instance of this
+# control plane on the same host, to avoid colliding container/project names.
+SERVICES_PREFIX ?= jungleforge
+
+SERVICES := docker compose -p $(SERVICES_PREFIX)-services -f docker-compose.services.yml
 
 # Shared external network every project + the backing services attach to (see comment at
 # APP_HOST). Declared `external: true` in every compose file, so Docker won't auto-create it —
