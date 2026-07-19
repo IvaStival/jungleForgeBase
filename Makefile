@@ -13,10 +13,10 @@
 
 env ?= dev
 
-# Prefix for the shared services' compose project + container names (jungleforge-services,
-# jungleforge-postgres, ...). Override in .env if running more than one instance of this
+# Prefix for the shared services' compose project + container names (jf-services,
+# jf-postgres, ...). Override in .env if running more than one instance of this
 # control plane on the same host, to avoid colliding container/project names.
-SERVICES_PREFIX ?= jungleforge
+SERVICES_PREFIX ?= jf
 
 SERVICES := docker compose -p $(SERVICES_PREFIX)-services -f docker-compose.services.yml
 

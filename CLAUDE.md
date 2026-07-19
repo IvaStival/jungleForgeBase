@@ -99,7 +99,7 @@ mirroring the php stack's `vendor`/`assets` convention.
   host port). Only `APP_HTTP_PORT` (host-published, per project in `deploy/.docker-env`) must be
   unique; container `8080` never collides because each container has its own IP. Create the
   network once with `docker network create lion-network` if it doesn't exist.
-- **`SERVICES_PREFIX` (default `jungleforge`, in `.env`)** prefixes `docker-compose.services.yml`'s
+- **`SERVICES_PREFIX` (default `jf`, in `.env`)** prefixes `docker-compose.services.yml`'s
   compose project name and its postgres/redis/rabbitmq container names. Only needs overriding
   if running more than one instance of this control plane on the same host — otherwise leave
   it unset.

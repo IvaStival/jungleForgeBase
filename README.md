@@ -349,7 +349,7 @@ stopped with `docker compose ... stop` (not `down`, which isn't scoped to indivi
 it still tails the full `docker-compose.services.yml` stack.
 
 Running more than one instance of this control plane on the same host? Set `SERVICES_PREFIX`
-in `.env` (default `jungleforge`) — it prefixes the compose project name and every core
+in `.env` (default `jf`) — it prefixes the compose project name and every core
 container name (`<prefix>-postgres`, etc.), so two instances don't collide.
 
 ### Browsing & bringing up registered apps
