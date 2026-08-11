@@ -15,62 +15,62 @@ updates from this upstream. See [Consuming this repo](#consuming-this-repo) belo
 
 ---
 
+## Quickstart
+
+```bash
+git clone <your-fork-url> jungleforgebase && cd jungleforgebase
+cp .env.example .env
+make base                                              # build the shared PHP base image (once)
+make services-up                                       # postgres + redis + rabbitmq
+echo 'DEMO_API_PATH='"$PWD"'/examples/demo-api' >> .env
+make up demo-api                                       # build + start the included demo
+curl localhost:8090/                                   # → confirms the whole loop works
+```
+
+`examples/demo-api` is a minimal Laravel app with its own `deploy/`, included so you can prove
+the control plane works end-to-end before registering your own project. Once it's running, swap
+it for your own: register your project's path in `.env`, scaffold its `deploy/` from
+`templates/deploy/` (or `-node`/`-frankenphp`), and `make up <your-project>`.
+
+---
+
 ## Features
 
-- **Central registry, one command per project** — register a project once (`<NAME>_PATH` in
-  `.env`) and drive it with `make up <project>`, `make build <project>`, `make sh <project>`,
-  etc. No per-project compose files to maintain.
-- **Three built-in stacks** — `php` (nginx + php-fpm + supervisord, the default), `node`
-  (Vite dev server in dev, built + served in prod), and `frankenphp` (Symfony or any PHP app
-  served directly by FrankenPHP's bundled Caddy, no nginx/php-fpm split). A project opts in via
-  `STACK=` in its `deploy/.docker-env`. See [docs/ADDING-A-STACK.md](docs/ADDING-A-STACK.md) to
-  add a 5th.
+- **Central registry, one command per project** — register once (`<NAME>_PATH` in `.env`), then
+  drive it with `make up/build/sh/logs <project>`. No per-project compose files to maintain.
+- **Three built-in stacks** — `php` (nginx + php-fpm + supervisord, the default), `node` (Vite),
+  and `frankenphp` (Caddy + PHP, e.g. Symfony). A project opts in via `STACK=` in its
+  `deploy/.docker-env`. See [docs/ADDING-A-STACK.md](docs/ADDING-A-STACK.md) to add a 5th.
+- **One self-contained container per project, no per-project Dockerfile** — every project builds
+  from jungleforgebase's shared `build/<stack>.Dockerfile`. It picks a `dev` target
+  (volume-mounted code, Xdebug) or an `app` target (baked code + assets) automatically from
+  `env=dev`/`env=prod`. A project's `deploy/` is just config — nothing to keep in sync.
 - **Prebuilt shared base image** — `make base` compiles the PHP extension layer **once** into
-  `jungleforge/php:<v>-fpm` / `jungleforge/php:<v>-dev`. Every project's **dev** build then just
-  `FROM`s it and layers config, so a freshly-registered project comes up in **seconds** instead
-  of recompiling gd/intl/redis/xdebug each time. Prod builds stay self-contained (see below).
-- **One self-contained container per project** — nginx and php-fpm (or FrankenPHP alone) live
-  in the **same** image; no separate nginx container, no project-scoped network — just `app`.
+  `jungleforge/php:<v>-{fpm,dev}`. Every project's **dev** build just `FROM`s it, so a
+  freshly-registered project comes up in **seconds**. Prod builds stay self-contained and
+  portable for multi-arch push.
 - **Shared network for inter-project calls** — every project joins the external `lion-network`
-  and gets a DNS alias equal to its name, so projects call each other at `http://<project>:8080`
-  (the in-container port). Each project's **host** port (`APP_HTTP_PORT`) is set in its own
-  `deploy/.docker-env` — give each a distinct value so they don't collide on the host.
-- **Dev / prod from the same Dockerfile** — the shared `build/Dockerfile` (or its `node.`/
-  `frankenphp.` counterpart) builds a `dev` target (volume-mounted code, Xdebug, composer, node)
-  or an `app` target (code and built assets baked in), selected automatically by `env=dev`
-  (default) or `env=prod`.
+  with a DNS alias equal to its name, so projects reach each other at `http://<project>:8080`.
+  Only the **host**-published port (`APP_HTTP_PORT`, set per project in `deploy/.docker-env`)
+  needs to be unique.
 - **Shared backing services** — Postgres, Redis and RabbitMQ run **once** as
-  `jungleforge-services` and every project reaches them by hostname (`postgres`, `redis`,
-  `rabbitmq`) over the external `lion-network`. Healthchecks and persistent volumes included.
-- **Interactive service picker** — `make services-up`/`services-down` are `fzf` checklists
-  scoped to postgres, redis, rabbitmq, plus any registered project marked as shared infra
-  (`BASE_SERVICE=true` in its `deploy/.docker-env`, e.g. a websocket server other projects
-  depend on). Everything is pre-selected, so pressing Enter reproduces the old
-  "bring everything up" / "stop everything" behavior; deselect what you don't need.
-- **Interactive app picker** — `make apps`/`apps-down` are the same idea for **every**
-  registered project, not just shared infra. `apps` shows each project's live running/stopped
-  status and starts with nothing pre-selected (bringing up every app at once is expensive);
-  `apps-down` lists only what's currently running, pre-selected.
+  `jungleforge-services`; every project reaches them by hostname (`postgres`/`redis`/`rabbitmq`)
+  over `lion-network`. Healthchecks and persistent volumes included.
+- **Interactive pickers** — `make services-up`/`services-down` are `fzf` checklists for
+  Postgres/Redis/RabbitMQ plus any project marked `BASE_SERVICE=true`; `make apps`/`apps-down`
+  do the same for **every** registered project, showing live running/stopped status.
 - **Layered PHP & nginx config** — `php.ini`, `opcache.ini` and the FPM pool (`www.conf`) are
-  *mounted*, not baked. Each is resolved as **project override** (`deploy/php/<file>`) **else
-  jungleforgebase default** (`defaults/php/<file>`). The nginx vhost (`deploy/nginx/default.conf`)
-  is baked into the image and additionally mounted live in dev for editing without a rebuild.
-- **Supervisor-managed runtime (php stack)** — one image runs nginx **and** php-fpm **plus**
-  Laravel Horizon and the scheduler under `supervisord` (no separate worker containers). In dev,
-  Horizon/scheduler are opt-in so a fresh project doesn't crash-loop before
-  `composer require laravel/horizon`.
-- **Multi-arch build & push** — `make push <project> env=prod` builds for
-  `TARGET_PLATFORMS` via `docker buildx bake`. An `arch=armv7` mode applies low-memory PHP
-  tuning deltas (JIT off, fewer FPM children, lower memory limit) for constrained hosts and
-  auto-reverts them afterwards.
-- **Prod is reverse-proxy ready** — each container's web server publishes on `127.0.0.1` only
-  (php stack additionally trusts `X-Forwarded-For`), so you terminate TLS with the host's system
-  nginx/Caddy and proxy to it.
-- **One shared Dockerfile per stack, no per-project Dockerfile** — every project builds with
-  jungleforgebase's shared `build/<stack>.Dockerfile`; compose points `build.dockerfile` at it
-  while the build context stays the project root. A project's `deploy/` is just config (web
-  server vhost/Caddyfile, supervisor, entrypoints, `.docker-env`) — nothing to keep in sync
-  across projects.
+  *mounted*, not baked, resolved as **project override** (`deploy/php/<file>`) else
+  **jungleforgebase default** (`defaults/php/<file>`). The nginx vhost is baked into the image
+  and also mounted live in dev for editing without a rebuild.
+- **Supervisor-managed runtime (php stack)** — one image runs nginx, php-fpm, Laravel Horizon
+  and the scheduler under `supervisord`. In dev, Horizon/scheduler are opt-in so a fresh project
+  doesn't crash-loop before `composer require laravel/horizon`.
+- **Multi-arch build & push** — `make push <project> env=prod` builds for `TARGET_PLATFORMS` via
+  `docker buildx bake`. `arch=armv7` applies low-memory PHP tuning for constrained hosts and
+  auto-reverts it afterwards.
+- **Prod is reverse-proxy ready** — each container's web server publishes on `127.0.0.1` only, so
+  you terminate TLS with the host's system nginx/Caddy and proxy to it.
 - **Drop-in project templates** — `templates/deploy/`, `templates/deploy-node/`,
   `templates/deploy-frankenphp/` are everything a project on that stack needs; copy the matching
   one to the project's `deploy/` and fill in `.docker-env`.
@@ -80,33 +80,30 @@ updates from this upstream. See [Consuming this repo](#consuming-this-repo) belo
 ## Architecture
 
 ```
-                       ┌──────────────────────────────────────────┐
-   make ... <project>  │  jungleforgebase (this repo) — control plane │
-  ───────────────────► │                                           │
-                       │  .env        project registry + creds     │
-                       │  Makefile    resolves paths, runs compose │
-                       │  defaults/   fallback php.ini/opcache/pool │
-                       │  templates/  deploy/ scaffold per stack   │
-                       └──────────────────────────────────────────┘
-                                          │
-                 ┌────────────────────────┼─────────────────────────┐
-                 │                         │                         │
-   ┌─────────────▼──────────────┐         │        ┌────────────────▼───────────┐
-   │ project: fantastica        │         │        │ project: demo-api          │
-   │  ONE container (supervisord)│        │        │  ONE container (supervisord)│
-   │  ┌───────┐   ┌───────────┐ │         │        │  ┌───────┐   ┌───────────┐ │
-   │  │ nginx │──►│  php-fpm   │ │         │        │  │ nginx │──►│  php-fpm   │ │
-   │  └───────┘   │ + horizon  │ │         │        │  └───────┘   │ + horizon  │ │
-   │   :8080      │ + scheduler│ │         │        │   :8080      │ + scheduler│ │
-   │              └─────┬──────┘ │         │        │              └─────┬──────┘ │
-   └────────────────────┼────────┘        │        └────────────────────┼────────┘
-                        │                 │                             │
-                        └─────────────────┴─────────────────────────────┘
-                                          │  lion-network (external, shared)
-                       ┌──────────────────▼──────────────────┐
-                       │  jungleforge-services (run once)        │
-                       │   postgres   redis   rabbitmq         │
-                       └───────────────────────────────────────┘
+                        ┌───────────────────────────────────────────────┐
+make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
+───────────────────────▶│                                               │
+                        │ .env        project registry + credentials    │
+                        │ Makefile    resolves paths, runs compose      │
+                        │ defaults/   fallback php.ini / opcache / pool │
+                        │ templates/  deploy/ scaffold per stack        │
+                        └───────────────────────────────────────────────┘
+                                               │
+                                               │
+                     ┬─────────────────────────┴─────────────────────────┬
+                     │                                                   │
+ ┌────────────────────────────────────────┐          ┌────────────────────────────────────────┐
+ │ project: your-app                      │          │ project: demo-api                      │
+ │ nginx -> php-fpm + horizon + scheduler │          │ nginx -> php-fpm + horizon + scheduler │
+ │ under supervisord, on :8080            │          │ under supervisord, on :8080            │
+ └───────────────────│────────────────────┘          └───────────────────│────────────────────┘
+                     │                                                   │
+                     ┴─────────────────────────┬─────────────────────────┴
+                                               │ lion-network (external, shared)
+                               ┌─────────────────────────────────┐
+                               │ jungleforge-services (run once) │
+                               │ postgres · redis · rabbitmq     │
+                               └─────────────────────────────────┘
 ```
 
 Inside a `php`-stack project container, nginx (`:8080`) serves static files from `public/` and
@@ -204,25 +201,6 @@ want them, with nothing of yours in the way.
 
 ---
 
-## Quickstart
-
-```bash
-git clone <your-fork-url> jungleforgebase && cd jungleforgebase
-cp .env.example .env
-make base                                              # build the shared PHP base image (once)
-make services-up                                       # postgres + redis + rabbitmq
-echo 'DEMO_API_PATH='"$PWD"'/examples/demo-api' >> .env
-make up demo-api                                       # build + start the included demo
-curl localhost:8090/                                   # → confirms the whole loop works
-```
-
-`examples/demo-api` is a minimal Laravel app with its own `deploy/`, included so you can prove
-the control plane works end-to-end before registering your own project. Once it's running, swap
-it for your own: register your project's path in `.env`, scaffold its `deploy/` from
-`templates/deploy/` (or `-node`/`-frankenphp`), and `make up <your-project>`.
-
----
-
 ## Usage
 
 ### Prerequisites
@@ -250,13 +228,13 @@ different `PHP_VERSION` in its `deploy/.docker-env`, build that version too (`ma
 Register a project by adding its absolute path to `.env` (name uppercased, dashes → underscores):
 
 ```dotenv
-FANTASTICA_PATH=/Users/you/Projects/fantastica
+YOUR_APP_PATH=/Users/you/Projects/your-app
 DEMO_API_PATH=/Users/you/Projects/jungleforgebase/examples/demo-api
 ```
 
 Each project's host port is set in its own `deploy/.docker-env` (`APP_HTTP_PORT`) — give each a
 distinct value so they don't collide. Regardless of host port, projects reach **each other**
-over the shared `lion-network` at `http://<project>:8080` (e.g. fantastica calls demo-api at
+over the shared `lion-network` at `http://<project>:8080` (e.g. your-app calls demo-api at
 `http://demo-api:8080`).
 
 `make help` lists every command and every registered project.
@@ -264,27 +242,27 @@ over the shared `lion-network` at `http://<project>:8080` (e.g. fantastica calls
 ### 2. Scaffold a project
 
 ```bash
-cp -r templates/deploy /path/to/fantastica/deploy        # or templates/deploy-node, templates/deploy-frankenphp
-cp /path/to/fantastica/deploy/.docker-env.example /path/to/fantastica/deploy/.docker-env
+cp -r templates/deploy /path/to/your-app/deploy        # or templates/deploy-node, templates/deploy-frankenphp
+cp /path/to/your-app/deploy/.docker-env.example /path/to/your-app/deploy/.docker-env
 # edit deploy/.docker-env: IMAGE_NAME, PHP_CONTAINER, PHP_VERSION, APP_HTTP_PORT (distinct per project)
 ```
 
-Then register the project's path in jungleforgebase's `.env` (`FANTASTICA_PATH=...`).
+Then register the project's path in jungleforgebase's `.env` (`YOUR_APP_PATH=...`).
 
 ### 3. Day-to-day (dev is the default `env`)
 
 ```bash
-make up fantastica            # build if needed + start dev (code mounted, Xdebug on)
-make logs fantastica          # tail logs
-make sh fantastica            # shell into the app container (pre-configured zsh)
-make migrate fantastica       # php artisan migrate --force
-make ps fantastica            # container status
-make restart fantastica
-make down fantastica          # stop & remove this project's containers
+make up your-app          # build if needed + start dev (code mounted, Xdebug on)
+make logs your-app        # tail logs
+make sh your-app          # shell into the app container (pre-configured zsh)
+make migrate your-app     # php artisan migrate --force
+make ps your-app          # container status
+make restart your-app
+make down your-app        # stop & remove this project's containers
 ```
 
 App is reachable on the host at `http://localhost:<APP_HTTP_PORT>` (the project's
-`deploy/.docker-env` value); from other projects on `lion-network` at `http://fantastica:8080`.
+`deploy/.docker-env` value); from other projects on `lion-network` at `http://your-app:8080`.
 Vite/HMR on `VITE_PORT` (default `5173`); Xdebug connects back to your IDE on `9003`.
 
 `make sh` opens a **pre-configured zsh** (oh-my-zsh + powerlevel10k + autosuggestions + syntax-
@@ -296,16 +274,16 @@ Horizon and the scheduler are off by default in dev (php stack) — enable them 
 container:
 
 ```bash
-make sh fantastica
+make sh your-app
 supervisorctl start horizon scheduler
 ```
 
 ### 4. Production
 
 ```bash
-make build fantastica env=prod    # bake code + built assets into the image
-make up    fantastica env=prod    # run the container (web server bound to 127.0.0.1:8080)
-make migrate fantastica env=prod
+make build your-app env=prod    # bake code + built assets into the image
+make up    your-app env=prod    # run the container (web server bound to 127.0.0.1:8080)
+make migrate your-app env=prod
 ```
 
 Then point the host's system nginx/Caddy at `127.0.0.1:8080` and terminate TLS there.
@@ -315,9 +293,9 @@ Then point the host's system nginx/Caddy at `127.0.0.1:8080` and terminate TLS t
 Set `REGISTRY` (and optionally `TARGET_PLATFORMS`) in `.env`, then:
 
 ```bash
-make push fantastica env=prod                 # multi-arch (TARGET_PLATFORMS) → registry
-make push fantastica env=prod arch=armv7      # single-arch armv7 + low-mem PHP tuning (auto-reverted)
-make pull fantastica env=prod                 # on the target host, pull the matching arch
+make push your-app env=prod                 # multi-arch (TARGET_PLATFORMS) → registry
+make push your-app env=prod arch=armv7      # single-arch armv7 + low-mem PHP tuning (auto-reverted)
+make pull your-app env=prod                 # on the target host, pull the matching arch
 ```
 
 To tune the **defaults** on a constrained host persistently (no auto-revert):
@@ -364,7 +342,7 @@ make apps-down    # same idea reversed — only currently-running projects
 project's live status, e.g.:
 
 ```
-fantastica           stopped
+your-app             stopped
 demo-api             running
 ```
 
