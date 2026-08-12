@@ -12,6 +12,7 @@
 -include .env
 
 env ?= dev
+force ?= false
 
 # Prefix for the shared services' compose project + container names (jf-services,
 # jf-postgres, ...). Override in .env if running more than one instance of this
@@ -57,6 +58,14 @@ ifeq ($(STACK),frankenphp)
 MIGRATE_CMD := php bin/console app:db:setup
 endif
 endif
+
+# Shared base image version this project's DEV build needs (php/node stacks only — frankenphp
+# has no local base, see ensure-base) — read from the project's own .docker-env, the same var
+# docker compose interpolates for the build arg. Defaults mirror base/base-node's own defaults.
+PROJECT_PHP_VERSION  := $(strip $(shell sed -n 's/^PHP_VERSION=//p' $(DEPLOY)/.docker-env 2>/dev/null | awk '{print $$1}'))
+PROJECT_PHP_VERSION  := $(or $(PROJECT_PHP_VERSION),8.4)
+PROJECT_NODE_VERSION := $(strip $(shell sed -n 's/^NODE_VERSION=//p' $(DEPLOY)/.docker-env 2>/dev/null | awk '{print $$1}'))
+PROJECT_NODE_VERSION := $(or $(PROJECT_NODE_VERSION),20)
 
 # php config: project override (deploy/php/<file>) else jungleforge default (defaults/php/<file>)
 PHP_INI     := $(or $(wildcard $(DEPLOY)/php/php.ini),$(CURDIR)/defaults/php/php.ini)
@@ -106,7 +115,7 @@ export PROJECT_PATH PHP_INI PHP_DEV_INI OPCACHE_INI FPM_POOL REGISTRY TARGET_PLA
 COMPOSE = docker compose -p $(PROJECT) --env-file $(DEPLOY)/.docker-env -f $(COMPOSE_FILE)
 
 .DEFAULT_GOAL := help
-.PHONY: help guard network ensure-network base base-node services-up services-down services-logs \
+.PHONY: help guard network ensure-network ensure-base base base-node services-up services-down services-logs \
         apps apps-down \
         build up down restart logs sh ps migrate \
         push pull apply-arch revert-arch
@@ -117,8 +126,10 @@ help:
 	@echo "  Shared base images (build once; project DEV builds reuse them):"
 	@echo "    make base                                   build jungleforge/php:8.4-{fpm,dev}"
 	@echo "    make base 8.3                               build for a specific PHP version"
+	@echo "    make base force=true                        rebuild without cache"
 	@echo "    make base-node                              build jungleforge/node:20-{prod,dev} (Vite/Node projects)"
 	@echo "    make base-node 22                           build for a specific Node version"
+	@echo "    make base-node force=true                   rebuild without cache"
 	@echo ""
 	@echo "  Shared network + services (run once on a fresh host):"
 	@echo "    make network                                create the external lion-network if missing"
@@ -134,7 +145,8 @@ help:
 	@echo "                                                 projects, pre-checked"
 	@echo "    make build|up|down|restart|logs|sh|ps|migrate <project> [env=prod]"
 	@echo "    (php/node/frankenphp is auto-selected from the project's .docker-env STACK;"
-	@echo "     migrate runs a stack default, or MIGRATE_CMD from .docker-env if set)"
+	@echo "     migrate runs a stack default, or MIGRATE_CMD from .docker-env if set;"
+	@echo "     build/up auto-build the shared base first if it's missing, dev only)"
 	@echo ""
 	@echo "  Cross-arch build + push (requires REGISTRY in .env; uses 'docker buildx bake'):"
 	@echo "    make push <project> env=prod                multi-arch (TARGET_PLATFORMS)"
@@ -157,15 +169,15 @@ guard:
 # Build the shared base images ONCE (project DEV builds FROM jungleforge/php:<v>-dev).
 # Re-run when you bump PHP versions or want fresh extensions. Default version 8.4.
 base:
-	docker build -f base/Dockerfile --target fpm --build-arg PHP_VERSION=$(BASE_VERSION) -t jungleforge/php:$(BASE_VERSION)-fpm .
-	docker build -f base/Dockerfile --target dev --build-arg PHP_VERSION=$(BASE_VERSION) -t jungleforge/php:$(BASE_VERSION)-dev .
+	docker build $(if $(filter true,$(force)),--no-cache) -f base/Dockerfile --target fpm --build-arg PHP_VERSION=$(BASE_VERSION) -t jungleforge/php:$(BASE_VERSION)-fpm .
+	docker build $(if $(filter true,$(force)),--no-cache) -f base/Dockerfile --target dev --build-arg PHP_VERSION=$(BASE_VERSION) -t jungleforge/php:$(BASE_VERSION)-dev .
 	@echo ">> built jungleforge/php:$(BASE_VERSION)-fpm and jungleforge/php:$(BASE_VERSION)-dev"
 
 # Build the shared Node base images ONCE (frontend project DEV builds FROM jungleforge/node:<v>-dev).
 # Re-run when you bump the Node major version. Default version 20.
 base-node:
-	docker build -f base/node.Dockerfile --target prod --build-arg NODE_VERSION=$(NODE_BASE_VERSION) -t jungleforge/node:$(NODE_BASE_VERSION)-prod .
-	docker build -f base/node.Dockerfile --target dev  --build-arg NODE_VERSION=$(NODE_BASE_VERSION) -t jungleforge/node:$(NODE_BASE_VERSION)-dev .
+	docker build $(if $(filter true,$(force)),--no-cache) -f base/node.Dockerfile --target prod --build-arg NODE_VERSION=$(NODE_BASE_VERSION) -t jungleforge/node:$(NODE_BASE_VERSION)-prod .
+	docker build $(if $(filter true,$(force)),--no-cache) -f base/node.Dockerfile --target dev  --build-arg NODE_VERSION=$(NODE_BASE_VERSION) -t jungleforge/node:$(NODE_BASE_VERSION)-dev .
 	@echo ">> built jungleforge/node:$(NODE_BASE_VERSION)-prod and jungleforge/node:$(NODE_BASE_VERSION)-dev"
 
 # Create the shared external lion-network if it doesn't exist (idempotent, verbose).
@@ -181,6 +193,25 @@ ensure-network:
 	@docker network inspect $(NETWORK) >/dev/null 2>&1 || \
 	 { docker network create $(NETWORK) >/dev/null && echo ">> created network $(NETWORK)"; }
 
+# DEV builds FROM the shared jungleforge/php|node base — build it first if missing, so a
+# freshly-registered project doesn't just fail with a bare "pull access denied". No-op for
+# env=prod (self-compiles) and STACK=frankenphp (bases FROM the public dunglas/frankenphp image
+# directly, no local base to check).
+ensure-base:
+	@if [ "$(env)" != "dev" ]; then exit 0; fi
+	@case "$(STACK)" in \
+	   php) \
+	     if ! docker image inspect jungleforge/php:$(PROJECT_PHP_VERSION)-dev >/dev/null 2>&1; then \
+	       echo ">> jungleforge/php:$(PROJECT_PHP_VERSION)-dev not built yet — building it first (make base $(PROJECT_PHP_VERSION))"; \
+	       $(MAKE) --no-print-directory base BASE_VERSION=$(PROJECT_PHP_VERSION); \
+	     fi ;; \
+	   node) \
+	     if ! docker image inspect jungleforge/node:$(PROJECT_NODE_VERSION)-dev >/dev/null 2>&1; then \
+	       echo ">> jungleforge/node:$(PROJECT_NODE_VERSION)-dev not built yet — building it first (make base-node $(PROJECT_NODE_VERSION))"; \
+	       $(MAKE) --no-print-directory base-node NODE_BASE_VERSION=$(PROJECT_NODE_VERSION); \
+	     fi ;; \
+	 esac
+
 services-up: ensure-network
 	@env=$(env) ./scripts/services-up.sh
 services-down:
@@ -195,9 +226,9 @@ apps: ensure-network
 apps-down:
 	@env=$(env) ./scripts/apps-down.sh
 
-build: guard ensure-network
-	$(COMPOSE) build
-up: guard ensure-network
+build: guard ensure-network ensure-base
+	$(COMPOSE) build $(if $(filter true,$(force)),--no-cache)
+up: guard ensure-network ensure-base
 	$(COMPOSE) up -d
 down: guard
 	$(COMPOSE) down
