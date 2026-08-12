@@ -1,17 +1,16 @@
 # jungleforgebase
 
 A small **Docker control plane** for running many backend + frontend projects from one place —
-PHP/Laravel (nginx + php-fpm), FrankenPHP (e.g. Symfony), and Node/Vite, side by side, sharing
-one Postgres + Redis + RabbitMQ stack.
+PHP/Laravel, FrankenPHP (e.g. Symfony), and Node/Vite — sharing one Postgres + Redis + RabbitMQ
+stack.
 
-One `make` command spins up any registered project as a **single self-contained container** in
-**dev** (live, volume-mounted code + Xdebug) or **prod** (code & assets baked into the image).
-PHP config falls back to sensible defaults but can be overridden per project, and prod images
-can be built and pushed **multi-arch** (amd64 / arm64 / armv7).
+One `make` command spins up any registered project as a **single self-contained container**, in
+**dev** (live code + Xdebug) or **prod** (baked image), and can build/push it **multi-arch**.
 
-This repo is the **engine only** — it holds no application code. You consume it by forking,
-registering your own projects (each living elsewhere on disk), and periodically pulling engine
-updates from this upstream. See [Consuming this repo](#consuming-this-repo) below.
+This repo holds no application code — it's the engine (Makefile, Dockerfiles, compose files,
+templates) that drives *other* projects living elsewhere on disk. Fork it, register your
+projects, and pull engine updates whenever you want — see
+[Consuming this repo](#consuming-this-repo).
 
 ---
 
@@ -34,50 +33,7 @@ it for your own: register your project's path in `.env`, scaffold its `deploy/` 
 
 ---
 
-## Features
-
-- **Central registry, one command per project** — register once (`<NAME>_PATH` in `.env`), then
-  drive it with `make up/build/sh/logs <project>`. No per-project compose files to maintain.
-- **Three built-in stacks** — `php` (nginx + php-fpm + supervisord, the default), `node` (Vite),
-  and `frankenphp` (Caddy + PHP, e.g. Symfony). A project opts in via `STACK=` in its
-  `deploy/.docker-env`. See [docs/ADDING-A-STACK.md](docs/ADDING-A-STACK.md) to add a 5th.
-- **One self-contained container per project, no per-project Dockerfile** — every project builds
-  from jungleforgebase's shared `build/<stack>.Dockerfile`. It picks a `dev` target
-  (volume-mounted code, Xdebug) or an `app` target (baked code + assets) automatically from
-  `env=dev`/`env=prod`. A project's `deploy/` is just config — nothing to keep in sync.
-- **Prebuilt shared base image** — `make base` compiles the PHP extension layer **once** into
-  `jungleforge/php:<v>-{fpm,dev}`. Every project's **dev** build just `FROM`s it, so a
-  freshly-registered project comes up in **seconds**. Prod builds stay self-contained and
-  portable for multi-arch push.
-- **Shared network for inter-project calls** — every project joins the external `lion-network`
-  with a DNS alias equal to its name, so projects reach each other at `http://<project>:8080`.
-  Only the **host**-published port (`APP_HTTP_PORT`, set per project in `deploy/.docker-env`)
-  needs to be unique.
-- **Shared backing services** — Postgres, Redis and RabbitMQ run **once** as
-  `jungleforge-services`; every project reaches them by hostname (`postgres`/`redis`/`rabbitmq`)
-  over `lion-network`. Healthchecks and persistent volumes included.
-- **Interactive pickers** — `make services-up`/`services-down` are `fzf` checklists for
-  Postgres/Redis/RabbitMQ plus any project marked `BASE_SERVICE=true`; `make apps`/`apps-down`
-  do the same for **every** registered project, showing live running/stopped status.
-- **Layered PHP & nginx config** — `php.ini`, `opcache.ini` and the FPM pool (`www.conf`) are
-  *mounted*, not baked, resolved as **project override** (`deploy/php/<file>`) else
-  **jungleforgebase default** (`defaults/php/<file>`). The nginx vhost is baked into the image
-  and also mounted live in dev for editing without a rebuild.
-- **Supervisor-managed runtime (php stack)** — one image runs nginx, php-fpm, Laravel Horizon
-  and the scheduler under `supervisord`. In dev, Horizon/scheduler are opt-in so a fresh project
-  doesn't crash-loop before `composer require laravel/horizon`.
-- **Multi-arch build & push** — `make push <project> env=prod` builds for `TARGET_PLATFORMS` via
-  `docker buildx bake`. `arch=armv7` applies low-memory PHP tuning for constrained hosts and
-  auto-reverts it afterwards.
-- **Prod is reverse-proxy ready** — each container's web server publishes on `127.0.0.1` only, so
-  you terminate TLS with the host's system nginx/Caddy and proxy to it.
-- **Drop-in project templates** — `templates/deploy/`, `templates/deploy-node/`,
-  `templates/deploy-frankenphp/` are everything a project on that stack needs; copy the matching
-  one to the project's `deploy/` and fill in `.docker-env`.
-
----
-
-## Architecture
+## How it works
 
 ```
                         ┌───────────────────────────────────────────────┐
@@ -106,81 +62,22 @@ make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
                                └─────────────────────────────────┘
 ```
 
-Inside a `php`-stack project container, nginx (`:8080`) serves static files from `public/` and
-proxies PHP requests to php-fpm on `127.0.0.1:9000`; supervisord keeps nginx, php-fpm, Horizon
-and the scheduler running. A `frankenphp`-stack project instead runs a single `frankenphp`
-process (Caddy + PHP) on `:8080`, configured via `deploy/Caddyfile` — no supervisord needed. A
-`node`-stack project runs the Vite dev server (dev) or `vite preview` (prod) on `:8080`.
+- **Each project runs as one container.** A `php`-stack project runs nginx + php-fpm + Laravel
+  Horizon + the scheduler under `supervisord`; `frankenphp` runs a single FrankenPHP process
+  (Caddy + PHP); `node` runs Vite. Pick the stack with `STACK=` in the project's
+  `deploy/.docker-env` (`php` is the default).
+- **Every project shares the `lion-network`** and is reachable by other projects at
+  `http://<project>:8080`, and reaches Postgres/Redis/RabbitMQ at their hostnames. Only each
+  project's **host** port (`APP_HTTP_PORT`) needs to be unique.
+- **A project carries no Dockerfile of its own** — it builds from jungleforgebase's shared
+  `build/<stack>.Dockerfile`. Its `deploy/` folder (scaffolded from `templates/deploy*/`) is
+  just config: web server vhost/Caddyfile, supervisor, entrypoints, `.docker-env`.
+- **`make base` builds a shared PHP image once**; every project's dev build reuses it, so a
+  freshly-registered project comes up in seconds. Prod builds stay self-contained and portable
+  for multi-arch push.
 
-All projects share the external `lion-network` and each container is aliased to its project
-name, so projects talk to **each other** at `http://<project>:8080` and to shared services at
-`postgres` / `redis` / `rabbitmq`. The container port is always `8080`; only the **host**-
-published port (`APP_HTTP_PORT`, set per project in `deploy/.docker-env`) must be unique per
-project — inside the network, identical `8080` ports never collide because each container has
-its own IP.
-
-**Compose files**
-
-| File                                              | Scope        | What it runs                                         |
-| -------------------------------------------------- | ------------ | ----------------------------------------------------- |
-| `docker-compose.services.yml`                     | global       | Shared Postgres + Redis + RabbitMQ on `lion-network`  |
-| `docker-compose.dev.yml` / `.prod.yml`             | per project  | `php` stack — nginx + php-fpm                         |
-| `docker-compose.node.dev.yml` / `.prod.yml`        | per project  | `node` stack — Vite                                   |
-| `docker-compose.frankenphp.dev.yml` / `.prod.yml`  | per project  | `frankenphp` stack — FrankenPHP (Caddy + PHP)         |
-
-**Per-project `deploy/` folder** (scaffolded from `templates/deploy*/`)
-
-A project carries **no Dockerfile** — every project builds with jungleforgebase's shared
-`build/<stack>.Dockerfile` (compose points `build.dockerfile` at it; the build context stays the
-project root, so the `COPY deploy/*` lines pull each project's own config). A `php`-stack
-project's `deploy/` looks like:
-
-```
-deploy/
-├── .docker-env           # orchestration vars (image name, container name, host port APP_HTTP_PORT)
-├── entrypoint.sh         # prod: artisan optimize, then hand off to supervisord
-├── entrypoint.dev.sh     # dev: ensure writable storage dirs, then supervisord
-├── nginx/default.conf    # serves public/, fastcgi to 127.0.0.1:9000 (same container)
-├── supervisor/
-│   ├── supervisord.conf      # prod: nginx + php-fpm + horizon + scheduler
-│   └── supervisord.dev.conf  # dev:  nginx + php-fpm (horizon/scheduler opt-in)
-└── php/                  # OPTIONAL overrides (php.ini, opcache.ini, www.conf)
-```
-
-A `frankenphp`-stack project's `deploy/` is simpler — `.docker-env`, `entrypoint.sh`,
-`entrypoint.dev.sh`, `Caddyfile`, no supervisor/nginx config needed.
-
-**Config resolution** (in the Makefile): for each of `php.ini`, `php.dev.ini`, `opcache.ini`,
-`www.conf` → use `deploy/php/<file>` if it exists, otherwise `defaults/php/<file>`.
-
-**Build strategy: dev reuses the base, prod self-compiles**
-
-- **Dev** (`target: dev`) is a thin layer: `FROM jungleforge/php:<v>-dev` (built by `make base`,
-  already has php + extensions + nginx + supervisor + xdebug + composer/node + a pre-configured
-  zsh) then just COPYs the supervisor/nginx/entrypoint config. No compiling → builds in seconds.
-- **Prod** (`target: app`) is **self-contained** — it compiles its own extension layer
-  (`php-base` stage below) so production images don't depend on the locally-built base and stay
-  portable for multi-arch `make push`.
-
-**Shared Dockerfile stages** (`build/Dockerfile` — one file, every `php`-stack project)
-
-- `dev` — `FROM` the prebuilt `jungleforge/php:<v>-dev` base; COPY config only.
-- `vendor` — `composer install --no-dev` + optimized autoloader (runs on the build host's
-  native arch even during cross-arch builds; `composer.lock` optional).
-- `assets` — `npm ci`/`npm install` + `npm run build` (native; optional — API-only projects
-  with no `package.json` no-op and just emit an empty `public/build`).
-- `php-base` — PHP-FPM Alpine + extensions (`bcmath gd intl mbstring opcache pcntl pdo_pgsql
-  pgsql sockets zip` + `redis`); the prod-only self-contained extension layer.
-- `app` — prod runtime: baked vendor + built assets, plus **nginx** + supervisor; supervisord
-  runs nginx + php-fpm + Horizon + scheduler. This is the only image shipped to production.
-
-> The dev base (`base/Dockerfile`, `fpm` stage) mirrors the `php-base` extension list — keep the
-> two in sync when adding extensions. The Dockerfile is written to tolerate project variation
-> (missing lockfile, no frontend), so one file serves every `php`-stack project.
-
-`build/node.Dockerfile` and `build/frankenphp.Dockerfile` follow the same dev-reuses-base /
-prod-self-compiles shape for their own stacks — see
-[docs/ADDING-A-STACK.md](docs/ADDING-A-STACK.md) for the full breakdown of what each stack needs.
+For the full breakdown of build stages, config resolution, and how to add a new stack, see
+[docs/ADDING-A-STACK.md](docs/ADDING-A-STACK.md) and `CLAUDE.md`.
 
 ---
 
@@ -221,10 +118,6 @@ make services-up              # interactive fzf checklist: postgres + redis + ra
                                # project with BASE_SERVICE=true), all pre-selected — Enter to start
 ```
 
-`make base` produces `jungleforge/php:8.4-fpm` and `jungleforge/php:8.4-dev`; project **dev** builds
-reuse them. Re-run it when you bump PHP versions or want fresh extensions. If a project pins a
-different `PHP_VERSION` in its `deploy/.docker-env`, build that version too (`make base 8.3`).
-
 Register a project by adding its absolute path to `.env` (name uppercased, dashes → underscores):
 
 ```dotenv
@@ -233,11 +126,8 @@ DEMO_API_PATH=/Users/you/Projects/jungleforgebase/examples/demo-api
 ```
 
 Each project's host port is set in its own `deploy/.docker-env` (`APP_HTTP_PORT`) — give each a
-distinct value so they don't collide. Regardless of host port, projects reach **each other**
-over the shared `lion-network` at `http://<project>:8080` (e.g. your-app calls demo-api at
-`http://demo-api:8080`).
-
-`make help` lists every command and every registered project.
+distinct value so they don't collide. `make help` lists every command and every registered
+project.
 
 ### 2. Scaffold a project
 
@@ -261,14 +151,9 @@ make restart your-app
 make down your-app        # stop & remove this project's containers
 ```
 
-App is reachable on the host at `http://localhost:<APP_HTTP_PORT>` (the project's
-`deploy/.docker-env` value); from other projects on `lion-network` at `http://your-app:8080`.
-Vite/HMR on `VITE_PORT` (default `5173`); Xdebug connects back to your IDE on `9003`.
-
-`make sh` opens a **pre-configured zsh** (oh-my-zsh + powerlevel10k + autosuggestions + syntax-
-highlighting, with `a`/`art` → `php artisan` aliases) baked into the dev base — no setup wizard.
-It lives only in the dev image; prod stays lean (`make sh … env=prod` falls back to `sh`). The
-shell config is in `base/zsh/` — edit and re-run `make base` to change it.
+App is reachable on the host at `http://localhost:<APP_HTTP_PORT>`; from other projects on
+`lion-network` at `http://your-app:8080`. Vite/HMR on `VITE_PORT` (default `5173`); Xdebug
+connects back to your IDE on `9003`.
 
 Horizon and the scheduler are off by default in dev (php stack) — enable them inside the
 container:
@@ -298,74 +183,26 @@ make push your-app env=prod arch=armv7      # single-arch armv7 + low-mem PHP tu
 make pull your-app env=prod                 # on the target host, pull the matching arch
 ```
 
-To tune the **defaults** on a constrained host persistently (no auto-revert):
+### Shared services & apps
 
 ```bash
-make apply-arch  arch=armv7       # apply low-mem deltas to defaults/php/*
-make revert-arch arch=armv7       # restore them
+make services-up     # fzf checklist: postgres/redis/rabbitmq + BASE_SERVICE=true projects
+make services-down   # same checklist, scoped to what's currently running
+make apps             # fzf checklist of EVERY registered project, live running/stopped status
+make apps-down         # same idea reversed — only currently-running projects
 ```
 
-### Shared services management
-
-```bash
-make services-up        # fzf checklist: postgres/redis/rabbitmq + BASE_SERVICE=true projects
-make services-down      # same checklist, scoped to what's currently running
-make services-logs      # tail the core stack's logs
-```
-
-`make services-up` (`scripts/services-up.sh`) lists the three core services plus any registered
-project whose `deploy/.docker-env` sets `BASE_SERVICE=true` — for infra-like projects other
-projects depend on (e.g. a websocket server other apps reach over RabbitMQ), not one-off apps.
-Everything starts pre-selected (Space to toggle, Enter to confirm), so hitting Enter with no
-changes brings up the same set as before this existed.
-
-`make services-down` (`scripts/services-down.sh`) mirrors it in reverse: the checklist only
-shows items that are **currently running**, still pre-selected, so Enter alone stops everything
-running (and if nothing's running, it says so and exits — nothing to select). Core services are
-stopped with `docker compose ... stop` (not `down`, which isn't scoped to individual services);
-`BASE_SERVICE` projects are stopped via `make down <project>`. `services-logs` is unaffected —
-it still tails the full `docker-compose.services.yml` stack.
-
-Running more than one instance of this control plane on the same host? Set `SERVICES_PREFIX`
-in `.env` (default `jf`) — it prefixes the compose project name and every core
-container name (`<prefix>-postgres`, etc.), so two instances don't collide.
-
-### Browsing & bringing up registered apps
-
-```bash
-make apps        # fzf checklist of EVERY registered project, with live running/stopped status
-make apps-down    # same idea reversed — only currently-running projects
-```
-
-`make apps` (`scripts/apps.sh`) is the app-level counterpart to `services-up`, but scoped to
-**every** project in `.env` (not just `BASE_SERVICE=true` ones) and annotated with each
-project's live status, e.g.:
-
-```
-your-app             stopped
-demo-api             running
-```
-
-Unlike the services pickers, nothing starts pre-selected — bringing up every registered app at
-once is expensive, so you pick exactly what you want (Space to toggle, Enter to confirm; Enter
-with nothing picked is a no-op). Selected projects are brought up via `make up <project>`,
-identical to running that command directly.
-
-`make apps-down` mirrors `services-down`: only currently-running projects are listed, all
-pre-selected (stopping is cheap), and selections are torn down via `make down <project>`. Both
-`make up <project>` / `make down <project>` keep working exactly as before, independent of
-these pickers.
+Running more than one instance of this control plane on the same host? Set `SERVICES_PREFIX` in
+`.env` (default `jf`) so container/project names don't collide between instances.
 
 ### Command summary
 
 | Command                                  | Effect                                                    |
-| ---------------------------------------- | --------------------------------------------------------- |
+| ----------------------------------------- | --------------------------------------------------------- |
 | `make base [version]`                    | Build shared `jungleforge/php:<v>-{fpm,dev}` base (once)     |
-| `make services-up`                       | Interactive `fzf` checklist: Postgres/Redis/RabbitMQ + `BASE_SERVICE=true` projects |
-| `make services-down`                     | Same checklist, scoped to what's currently running        |
+| `make services-up` / `services-down`     | Interactive `fzf` checklist: Postgres/Redis/RabbitMQ + `BASE_SERVICE=true` projects |
 | `make services-logs`                     | Tail the full shared services stack                        |
-| `make apps`                               | Interactive `fzf` checklist: every registered project, live status shown |
-| `make apps-down`                          | Same checklist, scoped to what's currently running        |
+| `make apps` / `apps-down`                | Interactive `fzf` checklist: every registered project      |
 | `make build <p> [env=prod]`              | Build the project image                                   |
 | `make up <p> [env=prod]`                 | Start the project (dev default)                           |
 | `make down \| restart <p> [env=prod]`    | Stop / restart the project                                |
