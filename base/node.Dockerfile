@@ -1,5 +1,5 @@
 # Shared Node base image for jungleforge frontend (Vite/Node) projects.
-# Mirrors base/Dockerfile (the PHP base): two targets — `prod` (minimal long-lived runtime) and
+# Mirrors base/php.Dockerfile (the PHP base): two targets — `prod` (minimal long-lived runtime) and
 # `dev` (+ git/zsh tooling). Project DEV builds layer thinly FROM jungleforge/node:<v>-dev.
 # Build both with: make base-node   (or `make base-node 22` for another major version).
 ARG NODE_VERSION=20

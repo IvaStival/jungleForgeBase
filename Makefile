@@ -94,7 +94,7 @@ export APP_HOST := $(PROJECT)
 # THE one common project Dockerfile (php), or its Node/FrankenPHP counterpart, chosen by STACK.
 # compose points build.dockerfile here (outside the project build context) so projects don't
 # each carry their own — they keep only their deploy/ config.
-APP_DOCKERFILE := $(CURDIR)/build/Dockerfile
+APP_DOCKERFILE := $(CURDIR)/build/php.Dockerfile
 ifeq ($(STACK),node)
 APP_DOCKERFILE := $(CURDIR)/build/node.Dockerfile
 endif
@@ -115,7 +115,7 @@ export PROJECT_PATH PHP_INI PHP_DEV_INI OPCACHE_INI FPM_POOL REGISTRY TARGET_PLA
 COMPOSE = docker compose -p $(PROJECT) --env-file $(DEPLOY)/.docker-env -f $(COMPOSE_FILE)
 
 .DEFAULT_GOAL := help
-.PHONY: help guard network ensure-network ensure-base base base-node services-up services-down services-logs \
+.PHONY: help guard network ensure-network ensure-base base base-php base-node services-up services-down services-logs \
         apps apps-down \
         build up down restart logs sh ps migrate \
         push pull apply-arch revert-arch
@@ -124,10 +124,12 @@ help:
 	@echo "JungleForge — central control plane"
 	@echo ""
 	@echo "  Shared base images (build once; project DEV builds reuse them):"
-	@echo "    make base                                   build jungleforge/php:8.4-{fpm,dev}"
-	@echo "    make base 8.3                               build for a specific PHP version"
-	@echo "    make base force=true                        rebuild without cache"
-	@echo "    make base-node                              build jungleforge/node:20-{prod,dev} (Vite/Node projects)"
+	@echo "    make base                                   interactive fzf checklist of php/node versions"
+	@echo "    make base force=true                        same, rebuilding whatever's selected without cache"
+	@echo "    make base-php                               build jungleforge/php:8.4-{fpm,dev} directly"
+	@echo "    make base-php 8.3                           build for a specific PHP version"
+	@echo "    make base-php force=true                    rebuild without cache"
+	@echo "    make base-node                              build jungleforge/node:20-{prod,dev} directly (Vite/Node projects)"
 	@echo "    make base-node 22                           build for a specific Node version"
 	@echo "    make base-node force=true                   rebuild without cache"
 	@echo ""
@@ -166,11 +168,17 @@ guard:
 	@if [ "$(env)" != "dev" ] && [ "$(env)" != "prod" ]; then echo "ERROR: env must be 'dev' or 'prod' (got '$(env)')"; exit 1; fi
 	@if [ ! -f "$(DEPLOY)/.docker-env" ]; then echo "ERROR: missing $(DEPLOY)/.docker-env"; exit 1; fi
 
-# Build the shared base images ONCE (project DEV builds FROM jungleforge/php:<v>-dev).
-# Re-run when you bump PHP versions or want fresh extensions. Default version 8.4.
+# Interactive fzf checklist over stack:version combos (php/node) — see scripts/base.sh.
+# force=true rebuilds whatever's selected without cache. For a version not listed, skip the
+# picker: `make base-php 8.3` / `make base-node 22`.
 base:
-	docker build $(if $(filter true,$(force)),--no-cache) -f base/Dockerfile --target fpm --build-arg PHP_VERSION=$(BASE_VERSION) -t jungleforge/php:$(BASE_VERSION)-fpm .
-	docker build $(if $(filter true,$(force)),--no-cache) -f base/Dockerfile --target dev --build-arg PHP_VERSION=$(BASE_VERSION) -t jungleforge/php:$(BASE_VERSION)-dev .
+	@force=$(force) ./scripts/base.sh
+
+# Build the shared PHP base image ONCE (project DEV builds FROM jungleforge/php:<v>-dev).
+# Re-run when you bump PHP versions or want fresh extensions. Default version 8.4.
+base-php:
+	docker build $(if $(filter true,$(force)),--no-cache) -f base/php.Dockerfile --target fpm --build-arg PHP_VERSION=$(BASE_VERSION) -t jungleforge/php:$(BASE_VERSION)-fpm .
+	docker build $(if $(filter true,$(force)),--no-cache) -f base/php.Dockerfile --target dev --build-arg PHP_VERSION=$(BASE_VERSION) -t jungleforge/php:$(BASE_VERSION)-dev .
 	@echo ">> built jungleforge/php:$(BASE_VERSION)-fpm and jungleforge/php:$(BASE_VERSION)-dev"
 
 # Build the shared Node base images ONCE (frontend project DEV builds FROM jungleforge/node:<v>-dev).
@@ -202,8 +210,8 @@ ensure-base:
 	@case "$(STACK)" in \
 	   php) \
 	     if ! docker image inspect jungleforge/php:$(PROJECT_PHP_VERSION)-dev >/dev/null 2>&1; then \
-	       echo ">> jungleforge/php:$(PROJECT_PHP_VERSION)-dev not built yet — building it first (make base $(PROJECT_PHP_VERSION))"; \
-	       $(MAKE) --no-print-directory base BASE_VERSION=$(PROJECT_PHP_VERSION); \
+	       echo ">> jungleforge/php:$(PROJECT_PHP_VERSION)-dev not built yet — building it first (make base-php $(PROJECT_PHP_VERSION))"; \
+	       $(MAKE) --no-print-directory base-php BASE_VERSION=$(PROJECT_PHP_VERSION); \
 	     fi ;; \
 	   node) \
 	     if ! docker image inspect jungleforge/node:$(PROJECT_NODE_VERSION)-dev >/dev/null 2>&1; then \

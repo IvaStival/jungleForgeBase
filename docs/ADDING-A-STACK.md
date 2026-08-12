@@ -25,7 +25,7 @@ plugin system. Everything downstream branches on that string with `ifeq`.
 ### 1. `build/<stack>.Dockerfile`
 
 One Dockerfile shared by every project on that stack (projects never carry their own
-Dockerfile — only their `deploy/` config). Mirror `build/Dockerfile`'s `dev`/`app` split:
+Dockerfile — only their `deploy/` config). Mirror `build/php.Dockerfile`'s `dev`/`app` split:
 
 - `dev` — thin, fast-building layer for local development. Code is volume-mounted from the
   host; you run the language's dependency install yourself (`composer install`, `npm install`,
@@ -36,7 +36,7 @@ Dockerfile — only their `deploy/` config). Mirror `build/Dockerfile`'s `dev`/`
 
 `build/frankenphp.Dockerfile` is the worked example: it skips the nginx/php-fpm split
 entirely (FrankenPHP bundles its own web server) and its `dev` stage is a thin layer on top of
-the official `dunglas/frankenphp` image, exactly like `build/Dockerfile`'s `dev` stage layers
+the official `dunglas/frankenphp` image, exactly like `build/php.Dockerfile`'s `dev` stage layers
 on top of jungleforgebase's own prebuilt `jungleforge/php:<v>-dev` base.
 
 ### 2. `docker-compose.<stack>.{dev,prod}.yml`
@@ -68,7 +68,7 @@ COMPOSE_FILE := docker-compose.frankenphp.$(env).yml
 endif
 
 # The shared Dockerfile to build with (~line 80-89)
-APP_DOCKERFILE := $(CURDIR)/build/Dockerfile
+APP_DOCKERFILE := $(CURDIR)/build/php.Dockerfile
 ifeq ($(STACK),node)
 APP_DOCKERFILE := $(CURDIR)/build/node.Dockerfile
 endif
