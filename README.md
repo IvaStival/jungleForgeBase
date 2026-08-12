@@ -72,9 +72,11 @@ make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
 - **A project carries no Dockerfile of its own** — it builds from jungleforgebase's shared
   `build/<stack>.Dockerfile`. Its `deploy/` folder (scaffolded from `templates/deploy*/`) is
   just config: web server vhost/Caddyfile, supervisor, entrypoints, `.docker-env`.
-- **`make base` builds a shared PHP image once**; every project's dev build reuses it, so a
-  freshly-registered project comes up in seconds. Prod builds stay self-contained and portable
-  for multi-arch push.
+- **`make base`/`make base-node` build the shared PHP/Node images once** (`force=true` rebuilds
+  without cache); every project's dev build reuses them, so a freshly-registered project comes up
+  in seconds. Prod builds stay self-contained and portable for multi-arch push. If a project's
+  dev build needs a base image that isn't built yet, `make build`/`make up` build it
+  automatically first — you don't have to remember to run `make base` by hand.
 
 For the full breakdown of build stages, config resolution, and how to add a new stack, see
 [docs/ADDING-A-STACK.md](docs/ADDING-A-STACK.md) and `CLAUDE.md`.
@@ -113,7 +115,8 @@ want them, with nothing of yours in the way.
 
 ```bash
 cp .env.example .env          # then edit: register projects + set service credentials
-make base                     # build the shared PHP base image (once; `make base 8.3` for 8.3)
+make base                     # build the shared PHP base image (once; `make base 8.3` for 8.3,
+                               # `make base force=true` to rebuild without cache)
 make services-up              # interactive fzf checklist: postgres + redis + rabbitmq (+ any
                                # project with BASE_SERVICE=true), all pre-selected — Enter to start
 ```
@@ -199,12 +202,13 @@ Running more than one instance of this control plane on the same host? Set `SERV
 
 | Command                                  | Effect                                                    |
 | ----------------------------------------- | --------------------------------------------------------- |
-| `make base [version]`                    | Build shared `jungleforge/php:<v>-{fpm,dev}` base (once)     |
+| `make base [version] [force=true]`       | Build shared `jungleforge/php:<v>-{fpm,dev}` base (once; `force=true` = no cache) |
+| `make base-node [version] [force=true]`  | Build shared `jungleforge/node:<v>-{prod,dev}` base (once; `force=true` = no cache) |
 | `make services-up` / `services-down`     | Interactive `fzf` checklist: Postgres/Redis/RabbitMQ + `BASE_SERVICE=true` projects |
 | `make services-logs`                     | Tail the full shared services stack                        |
 | `make apps` / `apps-down`                | Interactive `fzf` checklist: every registered project      |
-| `make build <p> [env=prod]`              | Build the project image                                   |
-| `make up <p> [env=prod]`                 | Start the project (dev default)                           |
+| `make build <p> [env=prod] [force=true]` | Build the project image (dev: auto-builds the missing base first) |
+| `make up <p> [env=prod] [force=true]`    | Start the project (dev default; same base auto-build)      |
 | `make down \| restart <p> [env=prod]`    | Stop / restart the project                                |
 | `make logs \| ps <p> [env=prod]`         | Logs / status                                             |
 | `make sh <p> [env=prod]`                 | Shell into the `app` container                            |

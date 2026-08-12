@@ -18,6 +18,7 @@ new stack needs.
 
 ```bash
 make base                       # build shared jungleforge/php:8.4-{fpm,dev} base (once; `make base 8.3` for another version)
+make base force=true            # rebuild the base without cache
 make services-up                # interactive fzf checklist: postgres/redis/rabbitmq + any BASE_SERVICE=true project, pre-checked
 make services-down              # same checklist, scoped to what's currently running
 make services-logs
@@ -64,8 +65,8 @@ reads it and auto-selects the Dockerfile + compose files, so `make build|up|down
 identical across stacks. `STACK` unset ⇒ `php`.
 
 - **Build the Node base once:** `make base-node` builds `jungleforge/node:20-{prod,dev}` (mirrors
-  `make base`; `make base-node 22` for another major). Frontend DEV builds layer thinly FROM
-  `jungleforge/node:20-dev`.
+  `make base`; `make base-node 22` for another major, `make base-node force=true` to rebuild
+  without cache). Frontend DEV builds layer thinly FROM `jungleforge/node:20-dev`.
 - **Register a frontend:** add `<NAME>_PATH=/abs/path` to `.env`, scaffold its `deploy/` from
   `templates/deploy-node/`, and set `STACK=node` (plus `NODE_VERSION`, `IMAGE_NAME`, `APP_CONTAINER`,
   `VITE_PORT`, `VITE_BACKEND_URL`) in `deploy/.docker-env`.
@@ -163,6 +164,14 @@ mirroring the php stack's `vendor`/`assets` convention.
 
 ## Gotchas
 
+- **`make build`/`make up` auto-build the shared base if it's missing** (dev env, php/node
+  stacks only — prod self-compiles and frankenphp bases off the public `dunglas/frankenphp`
+  image directly, so neither needs this). The version comes from the project's own
+  `deploy/.docker-env` (`PHP_VERSION`/`NODE_VERSION`); on a hit it's a silent no-op, on a miss it
+  prints `>> jungleforge/php:X-dev not built yet — building it first (make base X)` and runs the
+  equivalent of `make base X`/`make base-node X` before continuing. This is what a fresh clone or
+  a project pinning a not-yet-built version hits automatically — no need to remember to run
+  `make base` by hand first. See `ensure-base` in the Makefile.
 - **`arch=armv7` tuning** mutates `defaults/php/*` via `sed -i.bak`. `make push … arch=armv7`
   auto-reverts via an EXIT/INT/TERM trap; `apply-arch`/`revert-arch` are the persistent
   (no auto-revert) variants. `apply-arch` refuses to run if `.bak` snapshots already exist —
