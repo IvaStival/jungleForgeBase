@@ -1,17 +1,18 @@
 # Shared backing services for ALL projects — run ONCE:
-#   make services-up      (docker compose -p ${SERVICES_PREFIX:-jf}-services -f docker-compose.services.yml up -d)
+#   make services-up      (docker compose -p ${SERVICES_PREFIX}services -f docker-compose.services.yml up -d)
 #
 # Projects connect to these by alias (postgres / redis / rabbitmq) over lion-network.
-# Credentials and ports come from jungleforge's .env. SERVICES_PREFIX (default "jf")
-# disambiguates the project/container names if you run more than one instance of this control
-# plane on the same host.
+# Credentials and ports come from jungleforge's .env. SERVICES_PREFIX is empty (unprefixed
+# "postgres"/"redis"/"rabbitmq"/"services" container/project names) unless set in .env — set it
+# (including your own trailing separator, e.g. "myinstance-") if you run more than one instance
+# of this control plane on the same host, so the two don't collide.
 
-name: ${SERVICES_PREFIX:-jf}-services
+name: ${SERVICES_PREFIX}services
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: ${SERVICES_PREFIX:-jf}-postgres
+    container_name: ${SERVICES_PREFIX}postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -33,7 +34,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: ${SERVICES_PREFIX:-jf}-redis
+    container_name: ${SERVICES_PREFIX}redis
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "--appendonly", "yes"]
     ports:
@@ -52,7 +53,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: ${SERVICES_PREFIX:-jf}-rabbitmq
+    container_name: ${SERVICES_PREFIX}rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}

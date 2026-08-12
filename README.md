@@ -196,7 +196,9 @@ make apps-down         # same idea reversed — only currently-running projects
 ```
 
 Running more than one instance of this control plane on the same host? Set `SERVICES_PREFIX` in
-`.env` (default `jf`) so container/project names don't collide between instances.
+`.env` (empty by default — bare `postgres`/`redis`/`rabbitmq`/`services` names), including your
+own trailing separator (e.g. `SERVICES_PREFIX=myinstance-`), so container/project names don't
+collide between instances.
 
 ### Command summary
 

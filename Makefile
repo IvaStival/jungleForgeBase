@@ -14,12 +14,13 @@
 env ?= dev
 force ?= false
 
-# Prefix for the shared services' compose project + container names (jf-services,
-# jf-postgres, ...). Override in .env if running more than one instance of this
-# control plane on the same host, to avoid colliding container/project names.
-SERVICES_PREFIX ?= jf
+# Prefix for the shared services' compose project + container names — empty by default
+# (bare "postgres"/"redis"/"rabbitmq"/"services"). Set in .env (including your own trailing
+# separator, e.g. "myinstance-") if running more than one instance of this control plane on the
+# same host, to avoid colliding container/project names.
+SERVICES_PREFIX ?=
 
-SERVICES := docker compose -p $(SERVICES_PREFIX)-services -f docker-compose.services.yml
+SERVICES := docker compose -p $(SERVICES_PREFIX)services -f docker-compose.services.yml
 
 # Shared external network every project + the backing services attach to (see comment at
 # APP_HOST). Declared `external: true` in every compose file, so Docker won't auto-create it —
