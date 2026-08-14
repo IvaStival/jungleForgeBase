@@ -10,7 +10,7 @@ A **Docker control plane** for running many projects from one place, across thre
 code — it is the Makefile + compose files + shared base images + config defaults + project
 templates that drive *other* projects living elsewhere on disk. Each project runs as a
 **single self-contained container**, in `dev` (code volume-mounted, Xdebug) or `prod`
-(code/assets baked into the image). A single shared stack of Postgres + Redis + RabbitMQ backs
+(code/assets baked into the image). A single shared stack of MariaDB + Postgres + Redis + RabbitMQ backs
 every project. See `docs/ADDING-A-STACK.md` for how the `STACK` discriminator works and what a
 new stack needs.
 
@@ -19,9 +19,9 @@ new stack needs.
 ```bash
 make base                       # build shared jungleforge/php:8.4-{fpm,dev} base (once; `make base 8.3` for another version)
 make base force=true            # rebuild the base without cache
-make services-logs              # tail the shared postgres/redis/rabbitmq stack
+make services-logs              # tail the shared mariadb/postgres/redis/rabbitmq stack
 
-# Interactive picker — services (postgres/redis/rabbitmq + BASE_SERVICE=true projects) and apps
+# Interactive picker — services (mariadb/postgres/redis/rabbitmq + BASE_SERVICE=true projects) and apps
 # (everything else), running/stopped shown. Enter toggles + advances; land on the pinned
 # "Continue" row and press Enter to execute; ctrl-a selects everything shown. env=dev default.
 make up                         # picker: everything
@@ -119,7 +119,7 @@ mirroring the php stack's `vendor`/`assets` convention.
   which still use their own hand-set port). `make network`/`ensure-network` create the network
   (under whatever `NETWORK_NAME` resolves to) if it doesn't exist.
 - **`SERVICES_PREFIX` (empty by default, in `.env`)** prefixes `docker-compose.services.yml`'s
-  compose project name and its postgres/redis/rabbitmq container names — unset, they're just
+  compose project name and its mariadb/postgres/redis/rabbitmq container names — unset, they're just
   `services`/`postgres`/`redis`/`rabbitmq`. Only needs setting if running more than one instance
   of this control plane on the same host, and include your own trailing separator when you do
   (e.g. `SERVICES_PREFIX=myinstance-`).
@@ -132,14 +132,14 @@ mirroring the php stack's `vendor`/`assets` convention.
   compiles its own extension layer (`php-base` stage) so production images are portable for
   multi-arch push and don't depend on the locally-built base.
 - **One `fzf` picker, two groups.** `make build`/`make up`/`make down` (`scripts/pick.sh`) all
-  open the same picker: a **services** section (postgres/redis/rabbitmq + any project opted in
+  open the same picker: a **services** section (mariadb/postgres/redis/rabbitmq + any project opted in
   via `BASE_SERVICE=true` in its `deploy/.docker-env` — set that flag when a project is shared
   infra other projects depend on, e.g. a websocket bridge other projects reach over RabbitMQ, not
   a standalone app) and an **apps** section (every other registered project). The groups are a
   strict partition — a `BASE_SERVICE=true` project shows only under services, never both. Every
   row shows live running/stopped status. Nothing is pre-selected; Enter toggles the highlighted
-  row and advances to the next one, and the pinned `>>> Continue: <verb> selected` row at the top
-  is what you land on and press Enter on to actually execute (`ctrl-a` selects everything
+  row and advances to the next one, and the pinned `>>> Continue: <verb> selected` row at the
+  bottom is what you land on and press Enter on to actually execute (`ctrl-a` selects everything
   currently listed). The positional word (if any) filters by substring match against the slug;
   `group=services`/`group=apps` filters by section; both combine. `verb=build` omits the 3 core
   services (pulled images, no build step). `verb=down` runs `stop` (not `down`) on confirmed core

@@ -1,7 +1,7 @@
 # Shared backing services for ALL projects — run ONCE:
 #   make services-up      (docker compose -p ${SERVICES_PREFIX}services -f docker-compose.services.yml up -d)
 #
-# Projects connect to these by alias (postgres / redis / rabbitmq) over lion-network.
+# Projects connect to these by alias (mariadb / postgres / redis / rabbitmq) over lion-network.
 # Credentials and ports come from jungleforge's .env. SERVICES_PREFIX is empty (unprefixed
 # "postgres"/"redis"/"rabbitmq"/"services" container/project names) unless set in .env — set it
 # (including your own trailing separator, e.g. "myinstance-") if you run more than one instance
@@ -10,6 +10,29 @@
 name: ${SERVICES_PREFIX}services
 
 services:
+  mariadb:
+    image: mariadb:11
+    container_name: ${SERVICES_PREFIX}mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in .env}
+      MARIADB_USER: ${MARIADB_USER:-mariadb}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in .env}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-mariadb}
+    ports:
+      - "${MARIADB_PORT:-3306}:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      lion-network:
+        aliases:
+          - mariadb
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   postgres:
     image: postgres:16-alpine
     container_name: ${SERVICES_PREFIX}postgres
@@ -79,6 +102,7 @@ networks:
     driver: bridge
 
 volumes:
+  mariadb-data:
   postgres-data:
   redis-data:
   rabbitmq-data:

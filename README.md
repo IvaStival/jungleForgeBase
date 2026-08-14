@@ -1,7 +1,7 @@
 # jungleforgebase
 
 A small **Docker control plane** for running many backend + frontend projects from one place —
-PHP/Laravel, FrankenPHP (e.g. Symfony), and Node/Vite — sharing one Postgres + Redis + RabbitMQ
+PHP/Laravel, FrankenPHP (e.g. Symfony), and Node/Vite — sharing one MariaDB + Postgres + Redis + RabbitMQ
 stack.
 
 One `make` command spins up any registered project as a **single self-contained container**, in
@@ -20,7 +20,7 @@ projects, and pull engine updates whenever you want — see
 git clone <your-fork-url> jungleforgebase && cd jungleforgebase
 cp .env.example .env
 make base                                              # build the shared PHP base image (once)
-make up group=services                                 # picker: postgres + redis + rabbitmq —
+make up group=services                                 # picker: mariadb + postgres + redis + rabbitmq —
                                                         # ctrl-a to select all, Continue + Enter
 echo 'DEMO_API_PATH='"$PWD"'/examples/demo-api' >> .env
 make up demo-api                                       # picker filtered to "demo-api" — Enter, Enter
@@ -57,10 +57,10 @@ make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
                      │                                                   │
                      ┴─────────────────────────┬─────────────────────────┴
                                                │ lion-network (external, shared)
-                               ┌─────────────────────────────────┐
-                               │ services (run once)             │
-                               │ postgres · redis · rabbitmq     │
-                               └─────────────────────────────────┘
+                               ┌───────────────────────────────────────┐
+                               │ services (run once)                   │
+                               │ mariadb · postgres · redis · rabbitmq │
+                               └───────────────────────────────────────┘
 ```
 
 - **Each project runs as one container.** A `php`-stack project runs nginx + php-fpm + Laravel
@@ -71,7 +71,7 @@ make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
   default `lion-network`) and is reachable by other projects at `http://<project>:<that
   project's own APP_HTTP_PORT>` (the in-container port matches the host-published one — no fixed
   `8080`/`5173` — except `frankenphp` projects, which keep a fixed port set in their own
-  hand-owned Caddyfile), and reaches Postgres/Redis/RabbitMQ at their hostnames. Only each
+  hand-owned Caddyfile), and reaches MariaDB/Postgres/Redis/RabbitMQ at their hostnames. Only each
   project's **host** port (`APP_HTTP_PORT`) needs to be unique.
 - **A project carries no Dockerfile of its own** — it builds from jungleforgebase's shared
   `build/<stack>.Dockerfile`. Its `deploy/` folder (scaffolded from `templates/deploy*/`) is
@@ -121,7 +121,7 @@ want them, with nothing of yours in the way.
 cp .env.example .env          # then edit: register projects + set service credentials
 make base                     # build the shared PHP base image (once; `make base 8.3` for 8.3,
                                # `make base force=true` to rebuild without cache)
-make up group=services        # picker: postgres + redis + rabbitmq (+ any project with
+make up group=services        # picker: mariadb + postgres + redis + rabbitmq (+ any project with
                                # BASE_SERVICE=true) — ctrl-a to select all, then Continue + Enter
 ```
 
@@ -201,7 +201,7 @@ make down                      # same picker; confirmed core services get `stop`
 ```
 
 `make build`/`make up`/`make down` (`scripts/pick.sh`) all open the same picker: a **services**
-section (postgres/redis/rabbitmq + any project with `BASE_SERVICE=true`) and an **apps** section
+section (mariadb/postgres/redis/rabbitmq + any project with `BASE_SERVICE=true`) and an **apps** section
 (everything else registered), both showing live running/stopped status. Nothing starts
 pre-selected. **Enter** toggles the highlighted row and advances to the next one; a pinned
 `>>> Continue: <verb> selected` row is what you land on and press Enter on to execute against

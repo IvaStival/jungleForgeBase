@@ -138,7 +138,7 @@ help:
 	@echo "    make network                                create the external lion-network if missing"
 	@echo "    make services-logs                          tail the shared services stack"
 	@echo ""
-	@echo "  Interactive picker — services (postgres/redis/rabbitmq + BASE_SERVICE=true projects)"
+	@echo "  Interactive picker — services (mariadb/postgres/redis/rabbitmq + BASE_SERVICE=true projects)"
 	@echo "  and apps (everything else), running/stopped shown, env=dev default:"
 	@echo "    make build|up|down                          picker: everything"
 	@echo "    make build|up|down <name>                    picker: filtered to matches(<name>)"
@@ -219,7 +219,7 @@ ensure-base:
 services-logs:
 	$(SERVICES) logs -f
 
-# Unified picker (scripts/pick.sh) — services (postgres/redis/rabbitmq + BASE_SERVICE=true
+# Unified picker (scripts/pick.sh) — services (mariadb/postgres/redis/rabbitmq + BASE_SERVICE=true
 # projects) and apps (everything else), running/stopped shown. PROJECT (the positional word, if
 # any) is passed through as a substring filter; group= narrows to one section. Confirmed
 # selections are executed via the _build/_up/_down internal targets below (per-project) or a

@@ -1,8 +1,8 @@
 #!/bin/sh
 # Unified interactive picker for `make build`/`make up`/`make down`. Lists two groups —
-# "services" (postgres/redis/rabbitmq + any project with BASE_SERVICE=true) and "apps" (every
+# "services" (mariadb/postgres/redis/rabbitmq + any project with BASE_SERVICE=true) and "apps" (every
 # other registered project) — each annotated with live running/stopped status. Enter toggles the
-# highlighted row and advances to the next one; the pinned "Continue" row at the top is what you
+# highlighted row and advances to the next one; the pinned "Continue" row at the bottom is what you
 # land on and press Enter on to actually execute against everything toggled. ctrl-a selects
 # everything currently listed.
 #
@@ -57,7 +57,7 @@ apps_items=""
 
 # Core services — pull-only images, no build step, so omitted entirely when verb=build.
 if [ "$verb" != "build" ]; then
-    for core in postgres redis rabbitmq; do
+    for core in mariadb postgres redis rabbitmq; do
         matches_filter "$core" || continue
         status=$(status_for_container "${services_prefix}${core}")
         line=$(printf '%-24s %s' "$core" "$(colorize_status "$status")")
@@ -149,7 +149,7 @@ while IFS= read -r line; do
     esac
     slug=$(printf '%s' "$line" | awk '{print $1}')
     case "$slug" in
-        postgres|redis|rabbitmq) core="$core $slug" ;;
+        mariadb|postgres|redis|rabbitmq) core="$core $slug" ;;
         *) projects="$projects $slug" ;;
     esac
 done <<EOF
