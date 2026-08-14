@@ -207,8 +207,9 @@ pre-selected. **Enter** toggles the highlighted row and advances to the next one
 `>>> Continue: <verb> selected` row is what you land on and press Enter on to execute against
 everything toggled (`ctrl-a` selects everything listed). The positional word (if given) filters
 by substring match; `group=services`/`group=apps` filters by section — both combine.
-`verb=build` omits the 3 core services (no build step); `verb=down` runs `stop` (not `down`) on
-confirmed core services and a real `down` on confirmed apps.
+All 4 core services are listed under every verb, including `verb=build` — selecting one there is
+a no-op (no build step); `verb=down` runs `stop` (not `down`) on confirmed core services and a
+real `down` on confirmed apps.
 
 Running more than one instance of this control plane on the same host? Set `SERVICES_PREFIX` in
 `.env` (empty by default — bare `postgres`/`redis`/`rabbitmq`/`services` names), including your

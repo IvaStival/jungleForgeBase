@@ -29,7 +29,7 @@ make up fantastica               # picker: filtered to matches("fantastica")
 make up group=services           # picker: services section only
 make up force=true               # confirmed selections rebuild without cache first
 make up fantastica env=prod      # picker still applies; env just changes what gets started
-make build                      # same picker, verb=build (core services omitted — no build step)
+make build                      # same picker, verb=build (core services listed but no-op — no build step)
 make down                       # same picker, verb=down (core services get `stop`, apps get real `down`)
 
 # Per-project, unaffected by the picker — project name is the word after the target; env=dev default.
@@ -141,8 +141,9 @@ mirroring the php stack's `vendor`/`assets` convention.
   row and advances to the next one, and the pinned `>>> Continue: <verb> selected` row at the
   bottom is what you land on and press Enter on to actually execute (`ctrl-a` selects everything
   currently listed). The positional word (if any) filters by substring match against the slug;
-  `group=services`/`group=apps` filters by section; both combine. `verb=build` omits the 3 core
-  services (pulled images, no build step). `verb=down` runs `stop` (not `down`) on confirmed core
+  `group=services`/`group=apps` filters by section; both combine. All 4 core services are listed
+  under every verb, including `verb=build` — selecting one there is a no-op (pulled images, no
+  build step). `verb=down` runs `stop` (not `down`) on confirmed core
   services — scoped to just the ones selected, since `down` isn't — and a real `docker compose
   down` on confirmed apps. Requires `fzf` (`brew install fzf`); there is no non-fzf fallback.
   Confirmed selections are dispatched to the internal `_build`/`_up`/`_down` targets (per-project)

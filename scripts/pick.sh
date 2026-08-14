@@ -55,16 +55,15 @@ matches_filter() {
 services_items=""
 apps_items=""
 
-# Core services — pull-only images, no build step, so omitted entirely when verb=build.
-if [ "$verb" != "build" ]; then
-    for core in mariadb postgres redis rabbitmq; do
-        matches_filter "$core" || continue
-        status=$(status_for_container "${services_prefix}${core}")
-        line=$(printf '%-24s %s' "$core" "$(colorize_status "$status")")
-        services_items="$services_items
+# Core services always listed, all three verbs — build simply has nothing to do for them
+# (pulled images, no build step) and silently skips any that get selected there anyway.
+for core in mariadb postgres redis rabbitmq; do
+    matches_filter "$core" || continue
+    status=$(status_for_container "${services_prefix}${core}")
+    line=$(printf '%-24s %s' "$core" "$(colorize_status "$status")")
+    services_items="$services_items
 $line"
-    done
-fi
+done
 
 for name in $(grep -oE '^[A-Z0-9_]+_PATH' .env 2>/dev/null | sed 's/_PATH$//'); do
     path=$(sed -n "s/^${name}_PATH=//p" .env)
