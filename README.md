@@ -20,9 +20,10 @@ projects, and pull engine updates whenever you want — see
 git clone <your-fork-url> jungleforgebase && cd jungleforgebase
 cp .env.example .env
 make base                                              # build the shared PHP base image (once)
-make services-up                                       # postgres + redis + rabbitmq
+make up group=services                                 # picker: postgres + redis + rabbitmq —
+                                                        # ctrl-a to select all, Continue + Enter
 echo 'DEMO_API_PATH='"$PWD"'/examples/demo-api' >> .env
-make up demo-api                                       # build + start the included demo
+make up demo-api                                       # picker filtered to "demo-api" — Enter, Enter
 curl localhost:8090/                                   # → confirms the whole loop works
 ```
 
@@ -106,8 +107,8 @@ want them, with nothing of yours in the way.
 ### Prerequisites
 
 - Docker + Docker Compose v2 (`docker compose`), and `docker buildx` for multi-arch push.
-- [`fzf`](https://github.com/junegunn/fzf) — drives the `make services-up`/`services-down`/
-  `apps`/`apps-down` pickers (`brew install fzf`); there's no non-interactive fallback.
+- [`fzf`](https://github.com/junegunn/fzf) — drives the `make build`/`up`/`down` picker
+  (`brew install fzf`); there's no non-interactive fallback.
 - Each project must contain a `deploy/` folder (copy the template matching its stack) and its
   own `.env` pointing at the shared services: `DB_HOST=postgres`, `REDIS_HOST=redis`,
   `RABBITMQ_HOST=rabbitmq` (php/frankenphp — adjust var names to your framework's convention).
@@ -118,8 +119,8 @@ want them, with nothing of yours in the way.
 cp .env.example .env          # then edit: register projects + set service credentials
 make base                     # build the shared PHP base image (once; `make base 8.3` for 8.3,
                                # `make base force=true` to rebuild without cache)
-make services-up              # interactive fzf checklist: postgres + redis + rabbitmq (+ any
-                               # project with BASE_SERVICE=true), all pre-selected — Enter to start
+make up group=services        # picker: postgres + redis + rabbitmq (+ any project with
+                               # BASE_SERVICE=true) — ctrl-a to select all, then Continue + Enter
 ```
 
 Register a project by adding its absolute path to `.env` (name uppercased, dashes → underscores):
@@ -146,13 +147,13 @@ Then register the project's path in jungleforgebase's `.env` (`YOUR_APP_PATH=...
 ### 3. Day-to-day (dev is the default `env`)
 
 ```bash
-make up your-app          # build if needed + start dev (code mounted, Xdebug on)
-make logs your-app        # tail logs
+make up your-app          # picker filtered to "your-app" + Continue row — Enter, Enter
+make logs your-app        # tail logs (no picker — direct)
 make sh your-app          # shell into the app container (pre-configured zsh)
 make migrate your-app     # php artisan migrate --force
 make ps your-app          # container status
 make restart your-app
-make down your-app        # stop & remove this project's containers
+make down your-app        # picker filtered to "your-app" — stop & remove its containers
 ```
 
 App is reachable on the host at `http://localhost:<APP_HTTP_PORT>`; from other projects on
@@ -170,8 +171,8 @@ supervisorctl start horizon scheduler
 ### 4. Production
 
 ```bash
-make build your-app env=prod    # bake code + built assets into the image
-make up    your-app env=prod    # run the container (web server bound to 127.0.0.1:8080)
+make build your-app env=prod    # picker filtered to "your-app" — bakes code + built assets
+make up    your-app env=prod    # picker filtered to "your-app" — runs it (web server on 127.0.0.1:8080)
 make migrate your-app env=prod
 ```
 
@@ -187,14 +188,25 @@ make push your-app env=prod arch=armv7      # single-arch armv7 + low-mem PHP tu
 make pull your-app env=prod                 # on the target host, pull the matching arch
 ```
 
-### Shared services & apps
+### The build/up/down picker
 
 ```bash
-make services-up     # fzf checklist: postgres/redis/rabbitmq + BASE_SERVICE=true projects
-make services-down   # same checklist, scoped to what's currently running
-make apps             # fzf checklist of EVERY registered project, live running/stopped status
-make apps-down         # same idea reversed — only currently-running projects
+make up                       # picker: services + apps, running/stopped shown, nothing pre-picked
+make up your-app                # picker: filtered to matches("your-app")
+make up group=services          # picker: services section only
+make build force=true          # same picker; confirmed selections build with --no-cache first
+make down                      # same picker; confirmed core services get `stop`, confirmed apps get `down`
 ```
+
+`make build`/`make up`/`make down` (`scripts/pick.sh`) all open the same picker: a **services**
+section (postgres/redis/rabbitmq + any project with `BASE_SERVICE=true`) and an **apps** section
+(everything else registered), both showing live running/stopped status. Nothing starts
+pre-selected. **Enter** toggles the highlighted row and advances to the next one; a pinned
+`>>> Continue: <verb> selected` row is what you land on and press Enter on to execute against
+everything toggled (`ctrl-a` selects everything listed). The positional word (if given) filters
+by substring match; `group=services`/`group=apps` filters by section — both combine.
+`verb=build` omits the 3 core services (no build step); `verb=down` runs `stop` (not `down`) on
+confirmed core services and a real `down` on confirmed apps.
 
 Running more than one instance of this control plane on the same host? Set `SERVICES_PREFIX` in
 `.env` (empty by default — bare `postgres`/`redis`/`rabbitmq`/`services` names), including your
@@ -207,13 +219,12 @@ collide between instances.
 | ----------------------------------------- | --------------------------------------------------------- |
 | `make base [version] [force=true]`       | Build shared `jungleforge/php:<v>-{fpm,dev}` base (once; `force=true` = no cache) |
 | `make base-node [version] [force=true]`  | Build shared `jungleforge/node:<v>-{prod,dev}` base (once; `force=true` = no cache) |
-| `make services-up` / `services-down`     | Interactive `fzf` checklist: Postgres/Redis/RabbitMQ + `BASE_SERVICE=true` projects |
 | `make services-logs`                     | Tail the full shared services stack                        |
-| `make apps` / `apps-down`                | Interactive `fzf` checklist: every registered project      |
-| `make build <p> [env=prod] [force=true]` | Build the project image (dev: auto-builds the missing base first) |
-| `make up <p> [env=prod] [force=true]`    | Start the project (dev default; same base auto-build)      |
-| `make down \| restart <p> [env=prod]`    | Stop / restart the project                                |
-| `make logs \| ps <p> [env=prod]`         | Logs / status                                             |
+| `make build [name] [group=] [force=true]` | Picker (services+apps); confirmed selections build (dev: auto-builds the missing base first) |
+| `make up [name] [group=] [force=true]`   | Picker; confirmed selections start (dev: same base auto-build) |
+| `make down [name] [group=]`              | Picker; confirmed core services `stop`, confirmed apps `down` |
+| `make restart <p> [env=prod]`            | Restart the project directly, no picker                    |
+| `make logs \| ps <p> [env=prod]`         | Logs / status                                               |
 | `make sh <p> [env=prod]`                 | Shell into the `app` container                            |
 | `make migrate <p> [env=prod]`            | Stack-default migration command (`MIGRATE_CMD` overrides)  |
 | `make push <p> env=prod [arch=armv7]`    | Multi-arch (or armv7) build & push to `REGISTRY`          |

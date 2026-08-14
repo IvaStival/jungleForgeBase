@@ -19,17 +19,21 @@ new stack needs.
 ```bash
 make base                       # build shared jungleforge/php:8.4-{fpm,dev} base (once; `make base 8.3` for another version)
 make base force=true            # rebuild the base without cache
-make services-up                # interactive fzf checklist: postgres/redis/rabbitmq + any BASE_SERVICE=true project, pre-checked
-make services-down              # same checklist, scoped to what's currently running
-make services-logs
+make services-logs              # tail the shared postgres/redis/rabbitmq stack
 
-# Per-project — project name is the word after the target; env=dev is the default.
-make apps                       # interactive fzf checklist of EVERY registered project (shows
-                                 # running/stopped), none pre-checked — runs `make up` on your picks
-make apps-down                  # same idea reversed — only currently-running projects, pre-checked
-make up <project>               # build if needed + start dev
-make up <project> env=prod      # production (image must be built first)
-make build|down|restart|logs|ps|migrate <project> [env=prod]
+# Interactive picker — services (postgres/redis/rabbitmq + BASE_SERVICE=true projects) and apps
+# (everything else), running/stopped shown. Enter toggles + advances; land on the pinned
+# "Continue" row and press Enter to execute; ctrl-a selects everything shown. env=dev default.
+make up                         # picker: everything
+make up fantastica               # picker: filtered to matches("fantastica")
+make up group=services           # picker: services section only
+make up force=true               # confirmed selections rebuild without cache first
+make up fantastica env=prod      # picker still applies; env just changes what gets started
+make build                      # same picker, verb=build (core services omitted — no build step)
+make down                       # same picker, verb=down (core services get `stop`, apps get real `down`)
+
+# Per-project, unaffected by the picker — project name is the word after the target; env=dev default.
+make restart|logs|ps|migrate <project> [env=prod]
 make sh <project>               # shell into app container (zsh in dev, sh in prod)
 
 # Multi-arch build & push (needs REGISTRY in .env; uses docker buildx bake)
@@ -47,12 +51,16 @@ infrastructure, not code) — tests/lint belong to the individual projects.
 
 ## How the Makefile resolves a project
 
-`make up fantastica` → `PROJECT=fantastica` (2nd word of the goal) → looks up `FANTASTICA_PATH`
-in `.env` (uppercased, dashes→underscores). That path's `deploy/` folder supplies the per-project
-config, and `deploy/.docker-env` supplies orchestration vars (`IMAGE_NAME`, `PHP_CONTAINER`,
-`PHP_VERSION`, `APP_HTTP_PORT`, etc.). The trailing `%: @:` rule swallows the project-name word
-so make doesn't treat it as a target. `guard` validates the project is registered, env is
-dev/prod, and `.docker-env` exists.
+`make restart fantastica` → `PROJECT=fantastica` (2nd word of the goal) → looks up
+`FANTASTICA_PATH` in `.env` (uppercased, dashes→underscores). That path's `deploy/` folder
+supplies the per-project config, and `deploy/.docker-env` supplies orchestration vars
+(`IMAGE_NAME`, `PHP_CONTAINER`, `PHP_VERSION`, `APP_HTTP_PORT`, etc.). The trailing `%: @:` rule
+swallows the project-name word so make doesn't treat it as a target. `guard` validates the
+project is registered, env is dev/prod, and `.docker-env` exists — used directly by
+`restart`/`logs`/`sh`/`ps`/`migrate`/`push`/`pull`, and by `_build`/`_up`/`_down` (the internal
+targets `scripts/pick.sh` calls once it's resolved an exact project from the picker). `build`/
+`up`/`down` themselves don't call `guard` — the 2nd word is only a *filter* into the picker there
+(see Common commands above), not necessarily an exact registered slug.
 
 **To register a project:** add `<NAME>_PATH=/abs/path` to `.env`, and ensure the project has a
 `deploy/` folder (scaffold from `templates/deploy/`, `-node`, or `-frankenphp`) + a
@@ -114,19 +122,24 @@ mirroring the php stack's `vendor`/`assets` convention.
   jungleforge/php:<v>-dev` — no extension compiling, builds in seconds. Prod (`target: app`)
   compiles its own extension layer (`php-base` stage) so production images are portable for
   multi-arch push and don't depend on the locally-built base.
-- **Four `fzf` pickers, two scopes.** `make services-up`/`services-down`
-  (`scripts/services-up.sh` / `services-down.sh`) are scoped to the shared stack
-  (postgres/redis/rabbitmq) plus any project opted in via `BASE_SERVICE=true` in its
-  `deploy/.docker-env` — set that flag when a project is shared infra other projects depend on
-  (e.g. a websocket bridge other projects reach over RabbitMQ), not a standalone app.
-  `make apps`/`apps-down` (`scripts/apps.sh` / `apps-down.sh`) instead cover **every** project
-  registered in `.env`, regardless of `BASE_SERVICE`. In all four, `*-up`-style commands list
-  what's startable (`apps` additionally shows each project's live running/stopped status);
-  `*-down`-style commands list only what's *currently running*, and short-circuit with a message
-  if nothing is. `services-up`/`services-down`/`apps-down` pre-select everything shown
-  (cheap/safe to act on all of it); `apps` starts with nothing pre-selected (bringing up every
-  registered app at once is expensive — you opt in). Requires `fzf` (`brew install fzf`); there
-  is no non-fzf fallback.
+- **One `fzf` picker, two groups.** `make build`/`make up`/`make down` (`scripts/pick.sh`) all
+  open the same picker: a **services** section (postgres/redis/rabbitmq + any project opted in
+  via `BASE_SERVICE=true` in its `deploy/.docker-env` — set that flag when a project is shared
+  infra other projects depend on, e.g. a websocket bridge other projects reach over RabbitMQ, not
+  a standalone app) and an **apps** section (every other registered project). The groups are a
+  strict partition — a `BASE_SERVICE=true` project shows only under services, never both. Every
+  row shows live running/stopped status. Nothing is pre-selected; Enter toggles the highlighted
+  row and advances to the next one, and the pinned `>>> Continue: <verb> selected` row at the top
+  is what you land on and press Enter on to actually execute (`ctrl-a` selects everything
+  currently listed). The positional word (if any) filters by substring match against the slug;
+  `group=services`/`group=apps` filters by section; both combine. `verb=build` omits the 3 core
+  services (pulled images, no build step). `verb=down` runs `stop` (not `down`) on confirmed core
+  services — scoped to just the ones selected, since `down` isn't — and a real `docker compose
+  down` on confirmed apps. Requires `fzf` (`brew install fzf`); there is no non-fzf fallback.
+  Confirmed selections are dispatched to the internal `_build`/`_up`/`_down` targets (per-project)
+  or a direct `docker compose` call (core services) — don't call `_build`/`_up`/`_down` by hand,
+  they skip the picker entirely and assume `guard` will resolve their argument to a real
+  registered project.
 
 ## Key files
 
@@ -159,8 +172,8 @@ mirroring the php stack's `vendor`/`assets` convention.
 - `templates/deploy/` — drop-in scaffold copied into a `php`-stack project's `deploy/`
   (entrypoints, nginx vhost, supervisor configs, `.docker-env.example`).
 - `base/zsh/` — zsh config baked into both dev bases; edit then re-run `make base` / `make base-node`.
-- `scripts/services-up.sh`, `services-down.sh`, `apps.sh`, `apps-down.sh` — the four `fzf`
-  pickers (see Architecture essentials above).
+- `scripts/pick.sh` — the unified `fzf` picker behind `build`/`up`/`down` (see Architecture
+  essentials above).
 - `docs/ADDING-A-STACK.md` — how to add a 4th stack beyond php/node/frankenphp.
 - `examples/demo-api/` — a runnable minimal project proving the whole loop works out of the box.
 

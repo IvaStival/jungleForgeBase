@@ -1,18 +1,20 @@
 # JungleForge control plane.
 #
-# Shared backing services (postgres + redis + rabbitmq) — run once:
-#   make services-up | services-down | services-logs
+# make build|up|down opens an interactive picker (services + apps, running/stopped shown) —
+# bare, filtered to a project-name substring, or filtered to group=services|apps. Land on the
+# pinned "Continue" row and press Enter to execute against everything toggled.
+#   make up                       # picker: everything
+#   make up fantastica            # picker: filtered to matches("fantastica")
+#   make up group=services        # picker: services section only
 #
-# Per-project (project name = the word after the target; env=dev is the default):
-#   make build|up|down|restart|logs|sh|ps|migrate <project> [env=prod]
-# e.g.
-#   make up fantastica            # dev
-#   make up fantastica env=prod   # prod
+# Per-project (env=dev is the default), unaffected by the picker:
+#   make restart|logs|sh|ps|migrate <project> [env=prod]
 
 -include .env
 
 env ?= dev
 force ?= false
+group ?=
 
 # Prefix for the shared services' compose project + container names — empty by default
 # (bare "postgres"/"redis"/"rabbitmq"/"services"). Set in .env (including your own trailing
@@ -117,9 +119,8 @@ export PROJECT_PATH PHP_INI PHP_DEV_INI OPCACHE_INI FPM_POOL REGISTRY TARGET_PLA
 COMPOSE = docker compose -p $(PROJECT) --env-file $(DEPLOY)/.docker-env -f $(COMPOSE_FILE)
 
 .DEFAULT_GOAL := help
-.PHONY: help guard network ensure-network ensure-base base base-node services-up services-down services-logs \
-        apps apps-down \
-        build up down restart logs sh ps migrate \
+.PHONY: help guard network ensure-network ensure-base base base-node services-logs \
+        build up down _build _up _down restart logs sh ps migrate \
         push pull apply-arch revert-arch
 
 help:
@@ -133,22 +134,23 @@ help:
 	@echo "    make base-node 22                           build for a specific Node version"
 	@echo "    make base-node force=true                   rebuild without cache"
 	@echo ""
-	@echo "  Shared network + services (run once on a fresh host):"
+	@echo "  Shared network (run once on a fresh host):"
 	@echo "    make network                                create the external lion-network if missing"
-	@echo "    make services-up                            interactive fzf checklist (postgres/redis/rabbitmq"
-	@echo "                                                 + any project with BASE_SERVICE=true), pre-checked"
-	@echo "    make services-down                          same checklist, but only what's currently running"
-	@echo "    make services-logs"
+	@echo "    make services-logs                          tail the shared services stack"
 	@echo ""
-	@echo "  Per-project (env=dev default; env=prod for production):"
-	@echo "    make apps                                   interactive fzf checklist of every registered"
-	@echo "                                                 project (shows running/stopped), none pre-checked"
-	@echo "    make apps-down                               same idea, reversed — only currently-running"
-	@echo "                                                 projects, pre-checked"
-	@echo "    make build|up|down|restart|logs|sh|ps|migrate <project> [env=prod]"
+	@echo "  Interactive picker — services (postgres/redis/rabbitmq + BASE_SERVICE=true projects)"
+	@echo "  and apps (everything else), running/stopped shown, env=dev default:"
+	@echo "    make build|up|down                          picker: everything"
+	@echo "    make build|up|down <name>                    picker: filtered to matches(<name>)"
+	@echo "    make build|up|down group=services|apps       picker: that section only"
+	@echo "    make up force=true                          confirmed selections rebuild without cache first"
+	@echo "    (Enter: toggle + advance; land on \"Continue\" + Enter: execute; ctrl-a: select all)"
+	@echo "    (build/up auto-build the shared base first if it's missing, dev only)"
+	@echo ""
+	@echo "  Per-project, unaffected by the picker (env=dev default; env=prod for production):"
+	@echo "    make restart|logs|sh|ps|migrate <project> [env=prod]"
 	@echo "    (php/node/frankenphp is auto-selected from the project's .docker-env STACK;"
-	@echo "     migrate runs a stack default, or MIGRATE_CMD from .docker-env if set;"
-	@echo "     build/up auto-build the shared base first if it's missing, dev only)"
+	@echo "     migrate runs a stack default, or MIGRATE_CMD from .docker-env if set)"
 	@echo ""
 	@echo "  Cross-arch build + push (requires REGISTRY in .env; uses 'docker buildx bake'):"
 	@echo "    make push <project> env=prod                multi-arch (TARGET_PLATFORMS)"
@@ -214,25 +216,22 @@ ensure-base:
 	     fi ;; \
 	 esac
 
-services-up: ensure-network
-	@env=$(env) ./scripts/services-up.sh
-services-down:
-	@env=$(env) ./scripts/services-down.sh
 services-logs:
 	$(SERVICES) logs -f
 
-# Interactive pickers over EVERY registered project (contrast with services-up/down, which are
-# scoped to the core stack + BASE_SERVICE=true projects only). See scripts/apps*.sh.
-apps: ensure-network
-	@env=$(env) ./scripts/apps.sh
-apps-down:
-	@env=$(env) ./scripts/apps-down.sh
+# Unified picker (scripts/pick.sh) — services (postgres/redis/rabbitmq + BASE_SERVICE=true
+# projects) and apps (everything else), running/stopped shown. PROJECT (the positional word, if
+# any) is passed through as a substring filter; group= narrows to one section. Confirmed
+# selections are executed via the _build/_up/_down internal targets below (per-project) or a
+# direct compose call (core services) — never call those internal targets by hand.
+build up down: ensure-network
+	@verb=$@ env=$(env) force=$(force) filter='$(PROJECT)' group=$(group) ./scripts/pick.sh
 
-build: guard ensure-network ensure-base
+_build: guard ensure-network ensure-base
 	$(COMPOSE) build $(if $(filter true,$(force)),--no-cache)
-up: guard ensure-network ensure-base
+_up: guard ensure-network ensure-base
 	$(COMPOSE) up -d
-down: guard
+_down: guard
 	$(COMPOSE) down
 restart: guard
 	$(COMPOSE) restart
