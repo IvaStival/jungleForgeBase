@@ -31,6 +31,8 @@ make up force=true               # confirmed selections rebuild without cache fi
 make up fantastica env=prod      # picker still applies; env just changes what gets started
 make build                      # same picker, verb=build (core services listed but no-op — no build step)
 make down                       # same picker, verb=down (core services get `stop`, apps get real `down`)
+make info                       # read-only table: status, image, ports — same filter=/group= as above, no fzf
+make info fantastica             # filtered to matches("fantastica")
 
 # Per-project, unaffected by the picker — project name is the word after the target; env=dev default.
 make restart|logs|ps|migrate <project> [env=prod]
@@ -150,6 +152,8 @@ mirroring the php stack's `vendor`/`assets` convention.
   or a direct `docker compose` call (core services) — don't call `_build`/`_up`/`_down` by hand,
   they skip the picker entirely and assume `guard` will resolve their argument to a real
   registered project.
+- **`make info`** (`scripts/info.sh`) — read-only table (status, image, ports) of the same
+  services+apps set the picker lists, same `filter`/`group=` semantics, no `fzf`, no action taken.
 
 ## Key files
 

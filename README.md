@@ -211,6 +211,15 @@ All 4 core services are listed under every verb, including `verb=build` — sele
 a no-op (no build step); `verb=down` runs `stop` (not `down`) on confirmed core services and a
 real `down` on confirmed apps.
 
+`make info` (`scripts/info.sh`) prints a read-only table — status, image, ports — for the same
+services+apps set, with the same `filter`/`group=` semantics but no `fzf` and no action taken:
+
+```bash
+make info                    # everything
+make info your-app            # filtered to matches("your-app")
+make info group=services      # services section only
+```
+
 Running more than one instance of this control plane on the same host? Set `SERVICES_PREFIX` in
 `.env` (empty by default — bare `postgres`/`redis`/`rabbitmq`/`services` names), including your
 own trailing separator (e.g. `SERVICES_PREFIX=myinstance-`), so container/project names don't
@@ -226,6 +235,7 @@ collide between instances.
 | `make build [name] [group=] [force=true]` | Picker (services+apps); confirmed selections build (dev: auto-builds the missing base first) |
 | `make up [name] [group=] [force=true]`   | Picker; confirmed selections start (dev: same base auto-build) |
 | `make down [name] [group=]`              | Picker; confirmed core services `stop`, confirmed apps `down` |
+| `make info [name] [group=]`              | Read-only table (status, image, ports); no picker, no action |
 | `make restart <p> [env=prod]`            | Restart the project directly, no picker                    |
 | `make logs \| ps <p> [env=prod]`         | Logs / status                                               |
 | `make sh <p> [env=prod]`                 | Shell into the `app` container                            |

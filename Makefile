@@ -120,7 +120,7 @@ COMPOSE = docker compose -p $(PROJECT) --env-file $(DEPLOY)/.docker-env -f $(COM
 
 .DEFAULT_GOAL := help
 .PHONY: help guard network ensure-network ensure-base base base-node services-logs \
-        build up down _build _up _down restart logs sh ps migrate \
+        build up down info _build _up _down restart logs sh ps migrate \
         push pull apply-arch revert-arch
 
 help:
@@ -146,6 +146,7 @@ help:
 	@echo "    make up force=true                          confirmed selections rebuild without cache first"
 	@echo "    (Enter: toggle + advance; land on \"Continue\" + Enter: execute; ctrl-a: select all)"
 	@echo "    (build/up auto-build the shared base first if it's missing, dev only)"
+	@echo "    make info [<name>] [group=services|apps]    read-only table: status, image, ports"
 	@echo ""
 	@echo "  Per-project, unaffected by the picker (env=dev default; env=prod for production):"
 	@echo "    make restart|logs|sh|ps|migrate <project> [env=prod]"
@@ -226,6 +227,11 @@ services-logs:
 # direct compose call (core services) — never call those internal targets by hand.
 build up down: ensure-network
 	@verb=$@ env=$(env) force=$(force) filter='$(PROJECT)' group=$(group) ./scripts/pick.sh
+
+# Read-only table of every registered container (services + apps) — status, image, ports.
+# Same filter=/group= semantics as build/up/down, no fzf, no action taken.
+info:
+	@filter='$(PROJECT)' group=$(group) ./scripts/info.sh
 
 _build: guard ensure-network ensure-base
 	$(COMPOSE) build $(if $(filter true,$(force)),--no-cache)
