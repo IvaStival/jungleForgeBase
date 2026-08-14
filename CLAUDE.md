@@ -95,11 +95,12 @@ mirroring the php stack's `vendor`/`assets` convention.
   proxies PHP to php-fpm at `127.0.0.1:9000` *inside the same container*; supervisord keeps
   nginx + php-fpm (+ Horizon + scheduler) running. `frankenphp`-stack projects run one process
   instead (no supervisord); `node`-stack projects run Vite under supervisord.
-- **Shared `lion-network` (external).** Every container is aliased to its project name, so
-  projects call each other at `http://<project>:8080` (the in-container port — never the
-  host port). Only `APP_HTTP_PORT` (host-published, per project in `deploy/.docker-env`) must be
-  unique; container `8080` never collides because each container has its own IP. Create the
-  network once with `docker network create lion-network` if it doesn't exist.
+- **Shared `lion-network` (external, name configurable via `NETWORK_NAME` in `.env`, default
+  `lion-network`).** Every container is aliased to its project name, so projects call each other
+  at `http://<project>:8080` (the in-container port — never the host port). Only `APP_HTTP_PORT`
+  (host-published, per project in `deploy/.docker-env`) must be unique; container `8080` never
+  collides because each container has its own IP. `make network`/`ensure-network` create it
+  (under whatever `NETWORK_NAME` resolves to) if it doesn't exist.
 - **`SERVICES_PREFIX` (empty by default, in `.env`)** prefixes `docker-compose.services.yml`'s
   compose project name and its postgres/redis/rabbitmq container names — unset, they're just
   `services`/`postgres`/`redis`/`rabbitmq`. Only needs setting if running more than one instance

@@ -29,3 +29,4 @@ services:
 networks:
   lion-network:
     external: true
+    name: ${NETWORK_NAME:-lion-network}

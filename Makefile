@@ -25,7 +25,8 @@ SERVICES := docker compose -p $(SERVICES_PREFIX)services -f docker-compose.servi
 # Shared external network every project + the backing services attach to (see comment at
 # APP_HOST). Declared `external: true` in every compose file, so Docker won't auto-create it —
 # the `network` target (and the silent `ensure-network` prereq) create it on a fresh host.
-NETWORK := lion-network
+# Override via NETWORK_NAME in .env if "lion-network" collides with something else on your host.
+NETWORK := $(or $(NETWORK_NAME),lion-network)
 
 # Project name = second word on the command line (`make up fantastica` -> fantastica)
 PROJECT := $(word 2,$(MAKECMDGOALS))

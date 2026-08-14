@@ -75,7 +75,7 @@ services:
 
 networks:
   lion-network:
-    name: lion-network
+    name: ${NETWORK_NAME:-lion-network}
     driver: bridge
 
 volumes:

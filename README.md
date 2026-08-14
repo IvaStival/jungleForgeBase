@@ -57,7 +57,7 @@ make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
                      ┴─────────────────────────┬─────────────────────────┴
                                                │ lion-network (external, shared)
                                ┌─────────────────────────────────┐
-                               │ jungleforge-services (run once) │
+                               │ services (run once)             │
                                │ postgres · redis · rabbitmq     │
                                └─────────────────────────────────┘
 ```
@@ -66,9 +66,10 @@ make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
   Horizon + the scheduler under `supervisord`; `frankenphp` runs a single FrankenPHP process
   (Caddy + PHP); `node` runs Vite. Pick the stack with `STACK=` in the project's
   `deploy/.docker-env` (`php` is the default).
-- **Every project shares the `lion-network`** and is reachable by other projects at
-  `http://<project>:8080`, and reaches Postgres/Redis/RabbitMQ at their hostnames. Only each
-  project's **host** port (`APP_HTTP_PORT`) needs to be unique.
+- **Every project shares the `lion-network`** (name configurable via `NETWORK_NAME` in `.env`,
+  default `lion-network`) and is reachable by other projects at `http://<project>:8080`, and
+  reaches Postgres/Redis/RabbitMQ at their hostnames. Only each project's **host** port
+  (`APP_HTTP_PORT`) needs to be unique.
 - **A project carries no Dockerfile of its own** — it builds from jungleforgebase's shared
   `build/<stack>.Dockerfile`. Its `deploy/` folder (scaffolded from `templates/deploy*/`) is
   just config: web server vhost/Caddyfile, supervisor, entrypoints, `.docker-env`.
