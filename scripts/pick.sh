@@ -113,7 +113,7 @@ HEADER_SERVICES="── services ──"
 HEADER_APPS="── apps ──"
 CONTINUE_LABEL=">>> Continue: $verb selected"
 
-items="$CONTINUE_LABEL"
+items=""
 if [ -n "$services_items" ]; then
     items="$items
 $HEADER_SERVICES
@@ -124,6 +124,9 @@ if [ -n "$apps_items" ]; then
 $HEADER_APPS
 $apps_items"
 fi
+items="$items
+$CONTINUE_LABEL"
+items=$(printf '%s\n' "$items" | sed '/^$/d')
 
 selected=$(printf '%s\n' "$items" | fzf --multi --ansi \
     --header "Enter: toggle + advance   land on \"Continue\" + Enter: execute   ctrl-a: select all" \
