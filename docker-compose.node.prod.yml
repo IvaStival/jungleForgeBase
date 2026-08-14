@@ -19,10 +19,15 @@ services:
     image: ${REGISTRY:+${REGISTRY}/}${IMAGE_NAME:-app}:${IMAGE_TAG:-latest}
     container_name: ${APP_CONTAINER:-app-web}
     restart: unless-stopped
+    environment:
+      APP_HTTP_PORT: ${APP_HTTP_PORT:-4173}   # vite preview's own listen port — supervisord
+                                                # interpolates this, matching the external one
     ports:
-      - "127.0.0.1:${APP_HTTP_PORT:-4173}:5173"   # loopback only; front with host nginx for TLS
+      - "127.0.0.1:${APP_HTTP_PORT:-4173}:${APP_HTTP_PORT:-4173}"   # loopback only; front with host nginx for TLS
     networks:
       lion-network:
+        # Other projects reach this one at http://${APP_HOST}:${APP_HTTP_PORT} over the shared
+        # network (the in-container port now matches this project's own APP_HTTP_PORT).
         aliases:
           - ${APP_HOST:-app}
 

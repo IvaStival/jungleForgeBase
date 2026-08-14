@@ -14,7 +14,7 @@ ARG PHP_VERSION=8.4
 # ---------- fpm base: php + extensions + nginx + supervisor ----------
 FROM php:${PHP_VERSION}-fpm-alpine AS fpm
 RUN apk add --no-cache \
-        bash tini su-exec nginx supervisor \
+        bash tini su-exec nginx supervisor gettext \
         icu-libs libpng libjpeg-turbo libwebp freetype libzip \
         postgresql-libs oniguruma \
     && apk add --no-cache --virtual .build-deps \

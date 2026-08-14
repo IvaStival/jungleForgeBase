@@ -84,8 +84,9 @@ identical across stacks. `STACK` unset ⇒ `php`.
   (front with the host's nginx, same as PHP prod). Public `VITE_*` vars are **build-time** — passed
   as build args from `.docker-env` so `vite build` inlines them.
 - **API calls:** on `lion-network` the SPA reaches its backend container-to-container at
-  `http://<backend>:8080` (set `VITE_BACKEND_URL` to that; it's the vite proxy target in dev and the
-  inlined origin in prod).
+  `http://<backend>:<backend's own APP_HTTP_PORT>` (set `VITE_BACKEND_URL` to that; it's the vite
+  proxy target in dev and the inlined origin in prod — the backend's in-container port matches
+  its own `APP_HTTP_PORT`, not a fixed `8080`, unless it's a `frankenphp` backend, see below).
 - `make migrate` is PHP-only (artisan) and does not apply to Node projects.
 
 ## FrankenPHP projects
@@ -99,15 +100,23 @@ mirroring the php stack's `vendor`/`assets` convention.
 
 ## Architecture essentials
 
-- **One container per project.** In the `php` stack, nginx (`:8080`) serves `public/` and
-  proxies PHP to php-fpm at `127.0.0.1:9000` *inside the same container*; supervisord keeps
-  nginx + php-fpm (+ Horizon + scheduler) running. `frankenphp`-stack projects run one process
-  instead (no supervisord); `node`-stack projects run Vite under supervisord.
+- **One container per project.** In the `php` stack, nginx serves `public/` and proxies PHP to
+  php-fpm at `127.0.0.1:9000` *inside the same container*; supervisord keeps nginx + php-fpm
+  (+ Horizon + scheduler) running. `frankenphp`-stack projects run one process instead (no
+  supervisord); `node`-stack projects run Vite under supervisord.
+- **In-container port matches the host-published `APP_HTTP_PORT`** (`php`; `node`'s dev/prod use
+  `VITE_PORT`/`APP_HTTP_PORT` the same way) — not a fixed `8080` for every project. nginx's
+  config is a template (`deploy/nginx/default.conf.template`, `listen ${APP_HTTP_PORT}`)
+  rendered by the entrypoint at container start via `envsubst`, since the value is only known at
+  runtime; node's supervisord command lines use their own native
+  `%(ENV_VITE_PORT)s`/`%(ENV_APP_HTTP_PORT)s` interpolation instead, no envsubst needed there.
+  **`frankenphp` keeps a fixed internal port** — its Caddyfile is hand-owned per project (no
+  shared jungleforge template), so it isn't part of this templating.
 - **Shared `lion-network` (external, name configurable via `NETWORK_NAME` in `.env`, default
   `lion-network`).** Every container is aliased to its project name, so projects call each other
-  at `http://<project>:8080` (the in-container port — never the host port). Only `APP_HTTP_PORT`
-  (host-published, per project in `deploy/.docker-env`) must be unique; container `8080` never
-  collides because each container has its own IP. `make network`/`ensure-network` create it
+  at `http://<project>:<that project's own APP_HTTP_PORT>` (the in-container port — never assume
+  the host port, and never assume a fixed `8080`/`5173` either, except for `frankenphp` projects
+  which still use their own hand-set port). `make network`/`ensure-network` create the network
   (under whatever `NETWORK_NAME` resolves to) if it doesn't exist.
 - **`SERVICES_PREFIX` (empty by default, in `.env`)** prefixes `docker-compose.services.yml`'s
   compose project name and its postgres/redis/rabbitmq container names — unset, they're just

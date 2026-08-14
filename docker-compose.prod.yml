@@ -2,10 +2,11 @@
 # scheduler under supervisord). Driven by the Makefile:
 #   make build <project> env=prod && make up <project> env=prod
 #
-# Code, built assets and nginx config are baked into the image; only the project's .env and
-# php config are mounted at runtime. Backing services are the shared stack on lion-network
-# (`make services-up`). nginx publishes on 127.0.0.1 — terminate TLS with the host's system
-# nginx and proxy to it.
+# Code, built assets and nginx config template are baked into the image; only the project's .env
+# and php config are mounted at runtime. nginx's own listen port is templated
+# (default.conf.template) and rendered by the entrypoint, since APP_HTTP_PORT is only known at
+# runtime. Backing services are the shared stack on lion-network (`make up group=services`).
+# nginx publishes on 127.0.0.1 — terminate TLS with the host's system nginx and proxy to it.
 
 services:
   app:
@@ -25,11 +26,15 @@ services:
       - ${PHP_INI}:/usr/local/etc/php/php.ini:ro
       - ${OPCACHE_INI}:/usr/local/etc/php/conf.d/zz-opcache.ini:ro
       - ${FPM_POOL}:/usr/local/etc/php-fpm.d/www.conf:ro
+    environment:
+      APP_HTTP_PORT: ${APP_HTTP_PORT:-8080}   # nginx's own listen port — entrypoint renders it
+                                                # into default.conf from the baked template
     ports:
-      - "127.0.0.1:${APP_HTTP_PORT:-8080}:8080"   # nginx — front it with the host's system nginx
+      - "127.0.0.1:${APP_HTTP_PORT:-8080}:${APP_HTTP_PORT:-8080}"   # front with the host's system nginx
     networks:
       lion-network:
-        # Other projects reach this one at http://${APP_HOST}:8080 over the shared network.
+        # Other projects reach this one at http://${APP_HOST}:${APP_HTTP_PORT} over the shared
+        # network (the in-container port now matches this project's own APP_HTTP_PORT).
         aliases:
           - ${APP_HOST:-app}
 

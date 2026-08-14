@@ -4,8 +4,9 @@
 #
 # Code is volume-mounted from ${PROJECT_PATH}; php + nginx config are mounted from the
 # Makefile-resolved paths (project override else jungleforge default) so they're editable
-# without a rebuild. Backing services (postgres / redis / rabbitmq) are the shared stack on
-# lion-network — start them with `make services-up`.
+# without a rebuild. nginx's own listen port is templated (default.conf.template) and rendered
+# by the entrypoint, since APP_HTTP_PORT is only known at runtime. Backing services (postgres /
+# redis / rabbitmq) are the shared stack on lion-network — start them with `make up group=services`.
 
 services:
   app:
@@ -22,18 +23,21 @@ services:
       - ${PROJECT_PATH}:/var/www
       - ${PHP_DEV_INI}:/usr/local/etc/php/php.ini:ro
       - ${FPM_POOL}:/usr/local/etc/php-fpm.d/www.conf:ro
-      - ${PROJECT_PATH}/deploy/nginx/default.conf:/etc/nginx/http.d/default.conf:ro
+      - ${PROJECT_PATH}/deploy/nginx/default.conf.template:/etc/nginx/http.d/default.conf.template:ro
     environment:
+      APP_HTTP_PORT: ${APP_HTTP_PORT:-8080}   # nginx's own listen port — entrypoint renders it
+                                                # into default.conf from the mounted template
       XDEBUG_CONFIG: "client_host=host.docker.internal client_port=${XDEBUG_PORT:-9003}"
       PHP_IDE_CONFIG: "serverName=${IMAGE_NAME:-app}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${APP_HTTP_PORT:-8080}:8080"     # nginx (the app in the browser)
+      - "${APP_HTTP_PORT:-8080}:${APP_HTTP_PORT:-8080}"   # nginx — internal port now matches external
       - "${VITE_PORT:-5173}:5173"         # vite dev server / HMR
     networks:
       lion-network:
-        # Other projects reach this one at http://${APP_HOST}:8080 over the shared network.
+        # Other projects reach this one at http://${APP_HOST}:${APP_HTTP_PORT} over the shared
+        # network (the in-container port now matches this project's own APP_HTTP_PORT).
         aliases:
           - ${APP_HOST:-app}
 

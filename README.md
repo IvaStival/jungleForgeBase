@@ -52,7 +52,7 @@ make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
  ┌────────────────────────────────────────┐          ┌────────────────────────────────────────┐
  │ project: your-app                      │          │ project: demo-api                      │
  │ nginx -> php-fpm + horizon + scheduler │          │ nginx -> php-fpm + horizon + scheduler │
- │ under supervisord, on :8080            │          │ under supervisord, on :8080            │
+ │ under supervisord, on :‹port›          │          │ under supervisord, on :‹port›          │
  └───────────────────│────────────────────┘          └───────────────────│────────────────────┘
                      │                                                   │
                      ┴─────────────────────────┬─────────────────────────┴
@@ -68,9 +68,11 @@ make <cmd> <project>    │ jungleforgebase (this repo) — control plane   │
   (Caddy + PHP); `node` runs Vite. Pick the stack with `STACK=` in the project's
   `deploy/.docker-env` (`php` is the default).
 - **Every project shares the `lion-network`** (name configurable via `NETWORK_NAME` in `.env`,
-  default `lion-network`) and is reachable by other projects at `http://<project>:8080`, and
-  reaches Postgres/Redis/RabbitMQ at their hostnames. Only each project's **host** port
-  (`APP_HTTP_PORT`) needs to be unique.
+  default `lion-network`) and is reachable by other projects at `http://<project>:<that
+  project's own APP_HTTP_PORT>` (the in-container port matches the host-published one — no fixed
+  `8080`/`5173` — except `frankenphp` projects, which keep a fixed port set in their own
+  hand-owned Caddyfile), and reaches Postgres/Redis/RabbitMQ at their hostnames. Only each
+  project's **host** port (`APP_HTTP_PORT`) needs to be unique.
 - **A project carries no Dockerfile of its own** — it builds from jungleforgebase's shared
   `build/<stack>.Dockerfile`. Its `deploy/` folder (scaffolded from `templates/deploy*/`) is
   just config: web server vhost/Caddyfile, supervisor, entrypoints, `.docker-env`.
@@ -157,8 +159,8 @@ make down your-app        # picker filtered to "your-app" — stop & remove its 
 ```
 
 App is reachable on the host at `http://localhost:<APP_HTTP_PORT>`; from other projects on
-`lion-network` at `http://your-app:8080`. Vite/HMR on `VITE_PORT` (default `5173`); Xdebug
-connects back to your IDE on `9003`.
+`lion-network` at `http://your-app:<same APP_HTTP_PORT>` (the in-container port now matches it).
+Vite/HMR on `VITE_PORT` (default `5173`); Xdebug connects back to your IDE on `9003`.
 
 Horizon and the scheduler are off by default in dev (php stack) — enable them inside the
 container:

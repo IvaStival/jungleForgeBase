@@ -5,7 +5,8 @@
 #
 # Code is volume-mounted from ${PROJECT_PATH}; node_modules lives on an anonymous volume so the
 # host's (or absent) node_modules doesn't shadow the container's. The shared backing services on
-# lion-network are reachable by alias (e.g. the backend at http://<backend>:8080).
+# lion-network are reachable by alias (e.g. the backend at http://<backend>:<backend's own
+# APP_HTTP_PORT>).
 
 services:
   app:
@@ -22,15 +23,18 @@ services:
       - ${PROJECT_PATH}:/app
       - /app/node_modules                 # anon volume keeps the container's node_modules
     environment:
+      VITE_PORT: ${VITE_PORT:-5173}   # vite's own listen port — supervisord interpolates this
+                                        # directly, so the internal port matches the external one
       VITE_BACKEND_URL: ${VITE_BACKEND_URL:-}
       VITE_HMR_CLIENT_PORT: ${VITE_PORT:-5173}   # HMR websocket connects on the host port
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${VITE_PORT:-5173}:5173"         # vite dev server / HMR (the app in the browser)
+      - "${VITE_PORT:-5173}:${VITE_PORT:-5173}"   # vite dev server / HMR (the app in the browser)
     networks:
       lion-network:
-        # Other projects reach this one at http://${APP_HOST}:5173 over the shared network.
+        # Other projects reach this one at http://${APP_HOST}:${VITE_PORT} over the shared
+        # network (the in-container port now matches this project's own VITE_PORT).
         aliases:
           - ${APP_HOST:-app}
 

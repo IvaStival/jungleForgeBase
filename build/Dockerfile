@@ -18,7 +18,7 @@ ARG PHP_VERSION=8.4
 # + nginx + supervisor + xdebug + composer/node + zsh. Code is volume-mounted at runtime.
 FROM jungleforge/php:${PHP_VERSION}-dev AS dev
 COPY deploy/supervisor/supervisord.dev.conf /etc/supervisor/supervisord.conf
-COPY deploy/nginx/default.conf /etc/nginx/http.d/default.conf
+COPY deploy/nginx/default.conf.template /etc/nginx/http.d/default.conf.template
 COPY deploy/entrypoint.dev.sh /usr/local/bin/entrypoint
 RUN chmod +x /usr/local/bin/entrypoint
 WORKDIR /var/www
@@ -64,7 +64,7 @@ RUN if [ -f package.json ] && npm run 2>/dev/null | grep -qiE '^[[:space:]]+buil
 # depend on the locally-built base and stay portable for multi-arch `make push`.
 FROM php:${PHP_VERSION}-fpm-alpine AS php-base
 RUN apk add --no-cache \
-        bash tini su-exec nginx supervisor \
+        bash tini su-exec nginx supervisor gettext \
         icu-libs libpng libjpeg-turbo libwebp freetype libzip \
         postgresql-libs oniguruma \
     && apk add --no-cache --virtual .build-deps \
@@ -95,7 +95,7 @@ RUN apk add --no-cache zsh git \
 COPY --from=jungleforge base/zsh/zshrc    /root/.zshrc
 COPY --from=jungleforge base/zsh/p10k.zsh /root/.p10k.zsh
 COPY deploy/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
-COPY deploy/nginx/default.conf /etc/nginx/http.d/default.conf
+COPY deploy/nginx/default.conf.template /etc/nginx/http.d/default.conf.template
 COPY deploy/entrypoint.sh /usr/local/bin/entrypoint
 RUN chmod +x /usr/local/bin/entrypoint
 WORKDIR /var/www
