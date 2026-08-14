@@ -17,14 +17,14 @@ matches_filter() {
 
 services_prefix=$(sed -n 's/^SERVICES_PREFIX=//p' .env 2>/dev/null | head -1)
 
-# rows: slug<TAB>container_name<TAB>group
+# rows: group<TAB>slug<TAB>container_name
 rows=""
 
 if [ -z "$group" ] || [ "$group" = "services" ]; then
     for core in mariadb postgres redis rabbitmq; do
         matches_filter "$core" || continue
         rows="$rows
-$core	${services_prefix}${core}	services"
+services	$core	${services_prefix}${core}"
     done
 fi
 
@@ -49,7 +49,7 @@ for name in $(grep -oE '^[A-Z0-9_]+_PATH' .env 2>/dev/null | sed 's/_PATH$//'); 
     [ -z "$group" ] || [ "$group" = "$item_group" ] || continue
 
     rows="$rows
-$slug	$container	$item_group"
+$item_group	$slug	$container"
 done
 
 rows=$(printf '%s\n' "$rows" | sed '/^$/d')
@@ -63,25 +63,59 @@ if [ -z "$rows" ]; then
     exit 0
 fi
 
-printf '%-22s %-9s %-10s %-24s %-28s %s\n' "NAME" "GROUP" "STATUS" "CONTAINER" "IMAGE" "PORTS"
+# Enrich each row with status/image/published-ports, still tab-separated, then hand the whole
+# table to awk for two-pass column-width computation + colored rendering (color is wrapped
+# around each field AFTER padding so escape codes never throw off alignment).
+enriched=""
 while IFS= read -r row; do
     [ -n "$row" ] || continue
-    slug=$(printf '%s' "$row" | cut -f1)
-    container=$(printf '%s' "$row" | cut -f2)
-    item_group=$(printf '%s' "$row" | cut -f3)
+    item_group=$(printf '%s' "$row" | cut -f1)
+    slug=$(printf '%s' "$row" | cut -f2)
+    container=$(printf '%s' "$row" | cut -f3)
 
-    info=$(docker ps -a --filter "name=^${container}\$" --format '{{.Status}}	{{.Image}}	{{.Ports}}' | head -1)
-    if [ -z "$info" ]; then
+    if docker inspect "$container" >/dev/null 2>&1; then
+        status=$(docker ps -a --filter "name=^${container}\$" --format '{{.Status}}' | head -1)
+        image=$(docker inspect "$container" --format '{{.Config.Image}}')
+        ports=$(docker inspect "$container" --format \
+            '{{range $p, $c := .NetworkSettings.Ports}}{{if $c}}{{(index $c 0).HostPort}}->{{$p}} {{end}}{{end}}' \
+            | sed -E 's#/tcp##g; s/ $//')
+        [ -n "$ports" ] || ports="-"
+    else
         status="not created"
         image="-"
         ports="-"
-    else
-        status=$(printf '%s' "$info" | cut -f1)
-        image=$(printf '%s' "$info" | cut -f2)
-        ports=$(printf '%s' "$info" | cut -f3)
-        [ -n "$ports" ] || ports="-"
     fi
-    printf '%-22s %-9s %-10s %-24s %-28s %s\n' "$slug" "$item_group" "$status" "$container" "$image" "$ports"
+
+    enriched="$enriched
+$item_group	$slug	$status	$image	$ports"
 done <<EOF
 $rows
 EOF
+enriched=$(printf '%s\n' "$enriched" | sed '/^$/d')
+
+printf '%s\n' "$enriched" | awk -F'\t' '
+{
+    grp[NR] = $1; name[NR] = $2; status[NR] = $3; image[NR] = $4; ports[NR] = $5
+    if (length($2) > wname)   wname   = length($2)
+    if (length($3) > wstatus) wstatus = length($3)
+    if (length($4) > wimage)  wimage  = length($4)
+    n = NR
+}
+END {
+    if (wname   < 4) wname   = 4
+    if (wstatus < 6) wstatus = 6
+    if (wimage  < 5) wimage  = 5
+    lastgrp = ""
+    for (i = 1; i <= n; i++) {
+        if (grp[i] != lastgrp) {
+            if (lastgrp != "") printf "\n"
+            hdr = toupper(substr(grp[i],1,1)) substr(grp[i],2)
+            printf "\033[1m%s\033[0m\n", hdr
+            lastgrp = grp[i]
+        }
+        color = (status[i] ~ /^Up/) ? "32" : "90"
+        pad = wstatus - length(status[i])
+        printf "  %-*s  \033[%sm%s\033[0m%*s  %-*s  %s\n", \
+            wname, name[i], color, status[i], pad, "", wimage, image[i], ports[i]
+    }
+}'
