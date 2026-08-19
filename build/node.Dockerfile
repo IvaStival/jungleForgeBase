@@ -1,4 +1,4 @@
-# THE one shared Node/Vite project image (frontend counterpart of build/Dockerfile).
+# THE one shared Node/Vite project image (frontend counterpart of build/php.Dockerfile).
 # Stages: dev (thin layer on the prebuilt base, code volume-mounted) | deps (locked install) |
 # build (vite build) | app (prod runtime: `vite preview` under supervisord).
 # compose points build.dockerfile here while build.context stays the project root, so `COPY deploy/*`

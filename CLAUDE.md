@@ -158,18 +158,18 @@ mirroring the php stack's `vendor`/`assets` convention.
 ## Key files
 
 - `Makefile` — the entire control plane (path resolution, compose invocation, arch tuning).
-- `build/Dockerfile` — THE one shared `php`-stack project image. Stages: `dev`, `vendor`
+- `build/php.Dockerfile` — THE one shared `php`-stack project image. Stages: `dev`, `vendor`
   (composer), `assets` (npm), `php-base` (prod extensions), `app` (prod runtime). Compose points
   `build.dockerfile` here while `build.context` stays the project root, so `COPY deploy/*` pulls
   each project's own config. Written to tolerate variation: missing `composer.lock`, API-only
   projects with no `package.json`.
-- `base/Dockerfile` — the prebuilt dev base (`fpm` + `dev` targets). Its `fpm` extension list
-  **must stay in sync** with `build/Dockerfile`'s `php-base` stage — update both when adding a
+- `base/php.Dockerfile` — the prebuilt dev base (`fpm` + `dev` targets). Its `fpm` extension list
+  **must stay in sync** with `build/php.Dockerfile`'s `php-base` stage — update both when adding a
   PHP extension.
 - `docker-compose.{dev,prod,services}.yml` — per-project dev, per-project prod, shared services.
   `docker-compose.yml` is the legacy single-project setup, kept for reference; the Makefile does
   not use it.
-- `build/node.Dockerfile` — the Node/Vite counterpart of `build/Dockerfile`. Stages: `dev` (thin,
+- `build/node.Dockerfile` — the Node/Vite counterpart of `build/php.Dockerfile`. Stages: `dev` (thin,
   FROM `jungleforge/node:<v>-dev`), `deps` (npm ci), `build` (`vite build`), `app` (prod: `vite
   preview` under supervisord).
 - `base/node.Dockerfile` — prebuilt Node base (`prod` + `dev` targets); built by `make base-node`.

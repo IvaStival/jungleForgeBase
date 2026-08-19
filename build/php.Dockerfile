@@ -60,21 +60,26 @@ RUN if [ -f package.json ] && npm run 2>/dev/null | grep -qiE '^[[:space:]]+buil
     mkdir -p public/build
 
 # ---------- prod extension layer (self-contained for multi-arch) ----------
-# Mirrors base/Dockerfile's `fpm` stage. Kept here (not FROM the base) so prod images don't
-# depend on the locally-built base and stay portable for multi-arch `make push`.
+# Mirrors base/php.Dockerfile's `fpm` stage (extension list IN SYNC — keep both updated together).
+# Kept here (not FROM the base) so prod images don't depend on the locally-built base and stay
+# portable for multi-arch `make push`.
 FROM php:${PHP_VERSION}-fpm-alpine AS php-base
 RUN apk add --no-cache \
         bash tini su-exec nginx supervisor gettext \
         icu-libs libpng libjpeg-turbo libwebp freetype libzip \
         postgresql-libs oniguruma \
+        curl libxml2 libxslt gmp bzip2 libffi imagemagick rabbitmq-c gettext \
     && apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS icu-dev libpng-dev libjpeg-turbo-dev libwebp-dev \
         freetype-dev libzip-dev postgresql-dev oniguruma-dev linux-headers \
+        curl-dev libxml2-dev libxslt-dev gmp-dev bzip2-dev libffi-dev \
+        imagemagick-dev rabbitmq-c-dev gettext-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j"$(nproc)" \
-        bcmath gd intl mbstring opcache pcntl pdo_pgsql pgsql sockets zip \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
+        bcmath bz2 calendar curl exif ffi ftp gd gettext gmp intl mbstring \
+        mysqli opcache pcntl pdo_mysql pdo_pgsql pgsql soap sockets xsl zip \
+    && pecl install redis amqp mongodb apcu imagick \
+    && docker-php-ext-enable redis amqp mongodb apcu imagick \
     && apk del .build-deps \
     && sed -i 's/^user .*/user www-data;/' /etc/nginx/nginx.conf \
     && rm -rf /tmp/* /var/cache/apk/*

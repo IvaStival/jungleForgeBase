@@ -2,12 +2,12 @@
 #
 # THE common project image for the "frankenphp" stack (a project opts in with STACK=frankenphp
 # in its deploy/.docker-env) — one Dockerfile shared by every FrankenPHP-based project (e.g.
-# Symfony). Mirrors build/Dockerfile's dev/app split, but FrankenPHP bundles its own web server
+# Symfony). Mirrors build/php.Dockerfile's dev/app split, but FrankenPHP bundles its own web server
 # (Caddy) + PHP: there is no separate nginx/php-fpm pair and no supervisord — a single
 # `frankenphp run` process serves the app on :8080 (configured via the project's
 # deploy/Caddyfile).
 #
-# Composer dependencies are NOT installed at build time for `dev` — like build/Dockerfile's dev
+# Composer dependencies are NOT installed at build time for `dev` — like build/php.Dockerfile's dev
 # stage, code (including vendor/) is volume-mounted from the host, where you run `composer
 # install` yourself. `app` (prod) installs them in a builder stage and bakes the result in.
 
@@ -37,7 +37,7 @@ CMD ["frankenphp", "run", "--config", "/etc/frankenphp/Caddyfile"]
 
 # ---------- composer dependencies (prod) ----------
 # --platform=$BUILDPLATFORM keeps composer on the build host's native arch during cross-arch
-# builds (mirrors build/Dockerfile's vendor stage). composer.json is always present;
+# builds (mirrors build/php.Dockerfile's vendor stage). composer.json is always present;
 # composer.lock is optional (the [k] glob matches it if it exists, nothing otherwise).
 FROM --platform=$BUILDPLATFORM composer:2 AS vendor
 WORKDIR /app
